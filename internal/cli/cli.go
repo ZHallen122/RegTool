@@ -65,18 +65,6 @@ func loadService(ctx context.Context) (*service.Service, error) {
 	return service.Load(ctx)
 }
 
-// changeErrors folds the per-app failures of a run into a single error so the
-// process can exit non-zero after the table has been printed.
-func changeErrors(results []service.ChangeResult) error {
-	var errs []error
-	for _, result := range results {
-		if result.Err != nil {
-			errs = append(errs, result.Err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 // statusErrors does the same for the per-app failures of a status run.
 func statusErrors(statuses []service.AppStatus) error {
 	var errs []error

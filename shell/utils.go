@@ -2,95 +2,93 @@ package shell
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/user"
+	"path/filepath"
 	"strings"
 )
 
-// SetEnvVarToFile writes the environment variable to the specified shell configuration file.
-func SetEnvVarToFile(filename, key, value string) error {
-	usr, err := user.Current()
+// rcPerm is the mode a shell rc file is created with.
+const rcPerm fs.FileMode = 0o644
+
+// RCPath returns the absolute path of a shell configuration file that lives in
+// the user's home directory, for example ".zshrc".
+func RCPath(filename string) (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("error getting current user: %w", err)
+		return "", fmt.Errorf("failed to locate the home directory: %w", err)
 	}
-	homeDir := usr.HomeDir
-	filePath := fmt.Sprintf("%s/%s", homeDir, filename)
-
-	input, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			file, err := os.Create(filePath)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-		} else {
-			return err
-		}
-	}
-
-	lines := strings.Split(string(input), "\n")
-	var output []string
-	var found bool
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, fmt.Sprintf("export %s=", key)) {
-			output = append(output, fmt.Sprintf("export %s=\"%s\"", key, value))
-			found = true
-		} else {
-			output = append(output, line)
-		}
-	}
-
-	if !found {
-		output = append(output, fmt.Sprintf("export %s=\"%s\"", key, value))
-	}
-
-	return os.WriteFile(filePath, []byte(strings.Join(output, "\n")), 0644)
+	return filepath.Join(home, filename), nil
 }
 
-// GetEnvVarFromFile reads the environment variable from the specified shell configuration file.
-func GetEnvVarFromFile(filename, key string) (string, error) {
-	usr, err := user.Current()
+// SetEnvVarToFile writes an `export KEY="value"` line to the given shell
+// configuration file, replacing the existing export of the same key when there
+// is one. A missing file is created.
+func SetEnvVarToFile(filename, key, value string) error {
+	path, err := RCPath(filename)
 	if err != nil {
-		return "", fmt.Errorf("error getting current user: %w", err)
+		return err
 	}
-	homeDir := usr.HomeDir
-	filePath := fmt.Sprintf("%s/%s", homeDir, filename)
 
-	file, err := os.Open(filePath)
+	input, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("failed to read %s: %w", path, err)
+	}
+
+	exportLine := fmt.Sprintf("export %s=%q", key, value)
+	prefix := fmt.Sprintf("export %s=", key)
+
+	var (
+		lines   []string
+		found   bool
+		trimmed = strings.TrimRight(string(input), "\n")
+	)
+	if trimmed != "" {
+		lines = strings.Split(trimmed, "\n")
+	}
+	for i, line := range lines {
+		if strings.HasPrefix(line, prefix) {
+			lines[i] = exportLine
+			found = true
+		}
+	}
+	if !found {
+		lines = append(lines, exportLine)
+	}
+
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), rcPerm); err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return nil
+}
+
+// GetEnvVarFromFile reads the value exported for key from the given shell
+// configuration file.
+func GetEnvVarFromFile(filename, key string) (string, error) {
+	path, err := RCPath(filename)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
 
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open %s: %w", path, err)
+	}
+	defer func() { _ = file.Close() }()
+
+	prefix := fmt.Sprintf("export %s=", key)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, fmt.Sprintf("export %s=", key)) {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				return strings.Trim(parts[1], "\""), nil
-			}
+		if !strings.HasPrefix(line, prefix) {
+			continue
 		}
+		return strings.Trim(strings.TrimPrefix(line, prefix), `"`), nil
 	}
-
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read %s: %w", path, err)
 	}
-
-	return "", fmt.Errorf("environment variable %s not found", key)
-}
-
-// GetEnv attempts to get the environment variable from the OS environment first,
-// and if not found, it reads from the specified shell configuration file.
-func GetEnv(key, filename string) (string, error) {
-	// First, try to get the environment variable from the OS environment
-	if value, exists := os.LookupEnv(key); exists {
-		return value, nil
-	}
-
-	// If not found in OS environment, proceed to read from the shell configuration file
-	return GetEnvVarFromFile(filename, key)
+	return "", fmt.Errorf("environment variable %s is not set in %s", key, path)
 }

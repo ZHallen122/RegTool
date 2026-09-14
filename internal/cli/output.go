@@ -62,29 +62,37 @@ func writeEntries(w io.Writer, entries []service.RegistryEntry) error {
 	return flush(table)
 }
 
-func writeChanges(w io.Writer, results []service.ChangeResult, dryRun bool) error {
-	if len(results) == 0 {
+// writeUseResult prints what a `use` run did, or would do: one row per app and,
+// for a dry run, the unified diff of every file that would be rewritten.
+func writeUseResult(w io.Writer, result *service.UseResult) error {
+	if len(result.Changes) == 0 {
 		fmt.Fprintln(w, "nothing to change")
 		return nil
 	}
 
-	if dryRun {
+	if result.DryRun {
 		fmt.Fprintln(w, "dry run: no configuration was changed")
 	}
 
 	table := newTable(w)
 	fmt.Fprintln(table, "APP\tFROM\tTO\tRESULT")
-	for _, result := range results {
+	for _, change := range result.Changes {
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n",
-			result.App, orUnknown(result.From), orUnknown(result.To), changeOutcome(result, dryRun))
+			change.App, orUnknown(change.From), orUnknown(change.To), changeOutcome(change, result.DryRun))
 	}
-	return flush(table)
+	if err := flush(table); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func changeOutcome(result service.ChangeResult, dryRun bool) string {
+func changeOutcome(change service.ChangeResult, dryRun bool) string {
 	switch {
-	case result.Err != nil:
-		return "error: " + result.Err.Error()
+	case change.Err != nil:
+		return "error: " + change.Err.Error()
+	case change.Noop:
+		return "already set"
 	case dryRun:
 		return "would change"
 	default:

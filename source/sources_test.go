@@ -126,7 +126,7 @@ func TestEmbeddedSourcesConvert(t *testing.T) {
 	}
 
 	converted := ConvertSources(embedded)
-	for _, key := range []string{"npm", "yarn", "pip", "gem"} {
+	for _, key := range []string{"npm", "yarn", "pip", "gem", "go", "cargo"} {
 		entry, ok := converted[key]
 		if !ok {
 			t.Errorf("ConvertSources dropped %q", key)
@@ -155,6 +155,8 @@ func assertEmbeddedShape(t *testing.T, sources *structs.RegistrySources) {
 		"yarn",
 		"pip",
 		"gem",
+		"go",
+		"cargo",
 		"homebrew_api_domain",
 		"homebrew_bottle_domain",
 		"homebrew_brew_git_remote",

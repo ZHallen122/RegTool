@@ -24,19 +24,19 @@ func newUseCommand() *cobra.Command {
 				return err
 			}
 
-			results, err := svc.Use(cmd.Context(), args[0], args[1:], dryRun)
-			if err != nil {
-				return err
+			result, useErr := svc.Use(cmd.Context(), args[0], args[1:], dryRun)
+			if result == nil {
+				return useErr
 			}
 
 			if asJSON {
-				if err := writeJSON(cmd.OutOrStdout(), results); err != nil {
+				if err := writeJSON(cmd.OutOrStdout(), result); err != nil {
 					return err
 				}
-			} else if err := writeChanges(cmd.OutOrStdout(), results, dryRun); err != nil {
+			} else if err := writeUseResult(cmd.OutOrStdout(), result); err != nil {
 				return err
 			}
-			return changeErrors(results)
+			return useErr
 		},
 	}
 
