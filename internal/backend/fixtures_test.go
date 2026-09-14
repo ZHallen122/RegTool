@@ -171,5 +171,19 @@ func fixtures() []fixture {
 			from:     "https://old.example/index",
 			mustKeep: []string{"[net]", "retry = 3"},
 		},
+		{
+			name: "helm",
+			make: NewHelm,
+			existing: "apiVersion: v1\n" +
+				"generated: \"2026-01-02T03:04:05Z\"\n" +
+				"repositories:\n" +
+				"  - name: bitnami\n" +
+				"    url: https://charts.bitnami.com/bitnami\n" +
+				"  - name: stable\n" +
+				"    url: https://old.example/charts\n" +
+				"    username: someone\n",
+			from:     "https://old.example/charts",
+			mustKeep: []string{"apiVersion: v1", "generated:", "bitnami", "username: someone"},
+		},
 	}
 }
