@@ -1,0 +1,100 @@
+# sources says where the mirror list came from. The harness runs every script
+# offline, so with no cache yet the answer is the copy embedded in the binary.
+exec regtool sources
+! stderr .
+stdout '^origin\s+embedded$'
+stdout '^offline\s+yes$'
+stdout '^cache\s+.+sources\.cache\.json$'
+stdout '^etag\s+none$'
+stdout '^fetched\s+none$'
+stdout '^regions\s+3$'
+stdout '^apps\s+11$'
+! exists home/regtool/sources.cache.json
+
+# The same fields are available as JSON, on stdout only.
+exec regtool sources --json
+! stderr .
+stdout '"origin": "embedded"'
+stdout '"offline": true'
+stdout '"cachePath":'
+stdout '"regions": 3'
+stdout '"apps": 11'
+# Nothing is cached, so neither field is reported at all.
+! stdout '"etag":'
+! stdout '"fetchedAt":'
+
+# Refreshing offline is refused rather than silently doing nothing.
+! exec regtool sources refresh
+stderr 'REGTOOL_OFFLINE'
+
+# Point regtool at the harness's sources server and let it fetch for real.
+env REGTOOL_OFFLINE=
+env REGTOOL_SOURCES_URL=$SOURCES_URL
+
+exec regtool sources
+! stderr .
+stdout '^url\s+http://127\.0\.0\.1:\d+$'
+stdout '^origin\s+remote$'
+stdout '^offline\s+no$'
+stdout '^etag\s+"script-v1"$'
+stdout '^regions\s+2$'
+stdout '^apps\s+2$'
+
+# The fetch wrote the cache, wrapper and all.
+exists home/regtool/sources.cache.json
+grep '"url": "http://127\.0\.0\.1:\d+"' home/regtool/sources.cache.json
+grep '"etag": "\\"script-v1\\""' home/regtool/sources.cache.json
+grep '"fetched_at":' home/regtool/sources.cache.json
+grep '"sources":' home/regtool/sources.cache.json
+
+# The second run revalidates with If-None-Match, the server answers 304 and the
+# cache is what gets used.
+exec regtool sources
+! stderr .
+stdout '^origin\s+cache$'
+stdout '^etag\s+"script-v1"$'
+stdout '^fetched\s+\d{4}-\d{2}-\d{2}T'
+
+# The served mirrors are the ones the rest of the tool now works from.
+exec regtool list npm
+stdout '^npm\s+cn\s+https://served\.example/npm$'
+stdout '^npm\s+us\s+https://served\.example/npm-us$'
+
+# refresh fetches again regardless of the cached etag and says what it found.
+exec regtool sources refresh
+! stderr .
+stdout '^changed\s+no$'
+stdout '^etag\s+"script-v1"$'
+stdout '^regions\s+2$'
+
+exec regtool sources refresh --json
+! stderr .
+stdout '"changed": false'
+stdout '"etag": "\\"script-v1\\""'
+
+# Offline again, the cache stands in for the server.
+env REGTOOL_OFFLINE=1
+exec regtool sources
+! stderr .
+stdout '^origin\s+cache$'
+stdout '^offline\s+yes$'
+stdout '^regions\s+2$'
+
+# A cache written for another url says nothing about this one, so the embedded
+# copy is what is left offline.
+env REGTOOL_SOURCES_URL=http://127.0.0.1:1/sources.json
+exec regtool sources
+! stderr .
+stdout '^origin\s+embedded$'
+stdout '^etag\s+none$'
+stdout '^regions\s+3$'
+
+# A sources file wins over the url, the cache and the embedded copy alike.
+env REGTOOL_SOURCES_FILE=$PROBE_SOURCES
+exec regtool sources
+! stderr .
+stdout '^origin\s+file$'
+stdout '^file\s+.+probe-sources\.json$'
+
+! exec regtool sources refresh
+stderr 'REGTOOL_SOURCES_FILE'
