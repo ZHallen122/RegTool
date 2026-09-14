@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "regtool-hub.fullname" . }}
+  labels:
+    {{- include "regtool-hub.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Recreate, not RollingUpdate: the check history lives on a ReadWriteOnce
+  # volume, so the old pod has to let go of it before the new one can attach.
+  # A rolling update would deadlock waiting for a volume the outgoing pod still
+  # holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "regtool-hub.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if include "regtool-hub.hasSources" . }}
+        # Rolls the pod when the inline sources.json changes; without it the
+        # mounted file updates but the process keeps serving what it read at
+        # startup.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "regtool-hub.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "regtool-hub.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: regtool-hub
+          image: {{ include "regtool-hub.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The image's entrypoint already pins --db /data/hub.db; these
+          # replace the image's CMD.
+          args:
+            - --addr
+            - ":{{ .Values.service.port }}"
+            - --check-interval
+            - {{ .Values.hub.checkInterval | quote }}
+            - --check-timeout
+            - {{ .Values.hub.checkTimeout | quote }}
+            - --retention
+            - {{ .Values.hub.retention | quote }}
+            - --log-level
+            - {{ .Values.hub.logLevel | quote }}
+            {{- if include "regtool-hub.hasSources" . }}
+            - --sources
+            - /etc/regtool-hub/sources.json
+            {{- end }}
+            {{- with .Values.hub.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.hub.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          # /readyz is 503 until the first round of mirror checks finishes, so
+          # the failureThreshold has to cover that startup window rather than
+          # restart the pod out from under it.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if include "regtool-hub.hasSources" . }}
+            - name: sources
+              mountPath: /etc/regtool-hub
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "regtool-hub.pvcName" . }}
+          {{- else }}
+          # No PVC: the mirror list still serves, but the check history is
+          # gone on every restart.
+          emptyDir: {}
+          {{- end }}
+        {{- if include "regtool-hub.hasSources" . }}
+        - name: sources
+          configMap:
+            name: {{ include "regtool-hub.fullname" . }}-sources
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,164 @@
+# Default values for regtool-hub.
+# Every key here is documented in README.md; the comments below cover the ones
+# whose default is a decision rather than a placeholder.
+
+image:
+  repository: ghcr.io/zhallen122/regtool-hub
+  # Empty means "the chart's appVersion", so a chart upgrade is what moves the
+  # image. Pin it here to decouple the two.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# The hub keeps its check history in a SQLite file on a ReadWriteOnce volume,
+# and SQLite does not want two writers. A second replica would either be denied
+# the volume (most CSI drivers) or corrupt the database (those that allow
+# multi-attach), and it would buy nothing: the mirror list is the same bytes on
+# every pod and the checks are cheap. Scale out by running a second release in
+# another cluster or region, not by raising this.
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Nothing in the hub talks to the API server, so the token is never needed.
+  automount: false
+  annotations: {}
+  # Defaults to the fullname when create is true, "default" otherwise.
+  name: ""
+
+# Settings that map onto the binary's flags. Every one of these also has a
+# REGTOOL_HUB_* environment variable behind it, but the chart passes flags so
+# that `kubectl get pod -o yaml` shows the effective configuration.
+hub:
+  # --check-interval: how often every mirror is checked.
+  checkInterval: 5m
+  # --check-timeout: how long a single mirror check may take.
+  checkTimeout: 5s
+  # --retention: how long check results are kept. A plain day suffix works.
+  retention: 7d
+  # --log-level: debug, info, warn or error.
+  logLevel: info
+  # An inline sources.json. When set, it is rendered into a ConfigMap, mounted
+  # read-only and passed as --sources, replacing the list embedded in the
+  # binary. Leave empty to serve the embedded list.
+  #
+  # sources: |
+  #   {
+  #     "version": 1,
+  #     "registries": { ... }
+  #   }
+  sources: ""
+  # Extra arguments appended to the container's args, for a flag the chart does
+  # not model yet.
+  extraArgs: []
+  # Extra environment variables, e.g. HTTPS_PROXY for the mirror checks.
+  extraEnv: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+  # Only honoured when type is NodePort.
+  nodePort: ""
+
+# The check history lives on a PVC so a restart does not lose it. With
+# persistence disabled the pod gets an emptyDir instead: the mirror list still
+# serves, but /v1/health/history starts empty after every restart.
+persistence:
+  enabled: true
+  size: 1Gi
+  # "" leaves it to the cluster's default StorageClass; "-" disables dynamic
+  # provisioning.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+  # Use a volume that already exists instead of creating one. The chart then
+  # creates no PVC and never deletes the data.
+  existingClaim: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# The image already runs as the distroless nonroot uid; this states it so the
+# cluster can enforce it. fsGroup is what makes a freshly provisioned PVC
+# writable by that uid.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# The binary writes only to /data, which is a volume, so the root filesystem
+# can stay read-only.
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness touches nothing, so a slow database cannot get the process
+# restarted. Readiness is 503 until the first mirror check finishes (or 30s
+# passes), which is why its failureThreshold is generous rather than tight.
+livenessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 20
+  timeoutSeconds: 3
+  failureThreshold: 3
+readinessProbe:
+  initialDelaySeconds: 2
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 12
+
+# A ServiceMonitor for the Prometheus Operator. Off by default because the CRD
+# is not in a stock cluster; turning it on without prometheus-operator
+# installed makes the install fail.
+serviceMonitor:
+  enabled: false
+  # Empty uses the release namespace.
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  # Labels the operator's serviceMonitorSelector looks for, e.g.
+  # release: kube-prometheus-stack
+  labels: {}
+  annotations: {}
+  relabelings: []
+  metricRelabelings: []
+
+# The image `helm test` runs to curl /healthz. Distroless has no shell, so the
+# test pod cannot be the hub's own image.
+tests:
+  image:
+    repository: busybox
+    tag: "1.37"
+    pullPolicy: IfNotPresent
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+priorityClassName: ""
+# The hub drains in-flight requests for up to ten seconds on SIGTERM.
+terminationGracePeriodSeconds: 30
+
+extraVolumes: []
+extraVolumeMounts: []

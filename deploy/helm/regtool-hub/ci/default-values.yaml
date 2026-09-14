@@ -1,0 +1,7 @@
+# The defaults, spelled out as an explicit case so `helm lint -f` covers the
+# same path as an install with no --set at all.
+replicaCount: 1
+persistence:
+  enabled: true
+serviceMonitor:
+  enabled: false

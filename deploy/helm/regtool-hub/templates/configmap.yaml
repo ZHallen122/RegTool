@@ -1,0 +1,13 @@
+{{- if include "regtool-hub.hasSources" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "regtool-hub.fullname" . }}-sources
+  labels:
+    {{- include "regtool-hub.labels" . | nindent 4 }}
+data:
+  # Served verbatim by /v1/sources, so whatever is written here is exactly what
+  # the CLI sees.
+  sources.json: |
+    {{- .Values.hub.sources | nindent 4 }}
+{{- end }}

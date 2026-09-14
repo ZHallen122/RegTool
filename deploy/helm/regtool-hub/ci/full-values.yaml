@@ -1,0 +1,81 @@
+# Every optional knob at once, so a template branch that only renders under an
+# unusual combination still gets parsed.
+image:
+  tag: "1.2.0"
+  pullPolicy: Always
+imagePullSecrets:
+  - name: ghcr-pull
+fullnameOverride: regtool-hub-full
+serviceAccount:
+  create: true
+  automount: false
+  annotations:
+    example.com/owner: platform
+hub:
+  checkInterval: 10m
+  checkTimeout: 3s
+  retention: 30d
+  logLevel: warn
+  extraArgs:
+    - --check-timeout
+    - 4s
+  extraEnv:
+    - name: HTTPS_PROXY
+      value: http://proxy.example.com:3128
+service:
+  type: NodePort
+  port: 9090
+  nodePort: 31090
+  annotations:
+    example.com/exposed: "true"
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: fast-ssd
+  annotations:
+    example.com/backup: daily
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  relabelings:
+    - action: labeldrop
+      regex: pod
+  metricRelabelings:
+    - action: drop
+      regex: go_.*
+      sourceLabels: [__name__]
+podAnnotations:
+  example.com/team: platform
+podLabels:
+  example.com/tier: control
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: platform
+    effect: NoSchedule
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values: [amd64, arm64]
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: regtool-hub
+priorityClassName: system-cluster-critical
+terminationGracePeriodSeconds: 45
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+extraVolumeMounts:
+  - name: tmp
+    mountPath: /tmp

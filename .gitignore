@@ -1,9 +1,12 @@
-regtool
-regtool.exe
+# The built binaries, anchored to the repository root so the pattern cannot
+# also swallow a directory named after one — deploy/helm/regtool-hub is a
+# chart, not a leftover build.
+/regtool
+/regtool.exe
 demo/regtool
 dist/
-regtool-hub
-regtool-hub.exe
+/regtool-hub
+/regtool-hub.exe
 *.db
 *.db-wal
 *.db-shm

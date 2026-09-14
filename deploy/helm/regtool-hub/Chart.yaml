@@ -1,0 +1,23 @@
+apiVersion: v2
+name: regtool-hub
+description: The regtool mirror list service — serves the registry mirror list the regtool CLI reads, checks every mirror on a schedule and exports the results as JSON and Prometheus metrics.
+type: application
+
+# The chart version is bumped independently of the app; the release workflow
+# overrides both with the tag it is publishing.
+version: 0.1.0
+appVersion: "1.2.0"
+
+home: https://github.com/ZHallen122/RegTool
+sources:
+  - https://github.com/ZHallen122/RegTool
+keywords:
+  - regtool
+  - registry
+  - mirror
+  - npm
+  - monitoring
+
+maintainers:
+  - name: ZHallen122
+    url: https://github.com/ZHallen122
