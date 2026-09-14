@@ -66,6 +66,55 @@ func writeEntries(w io.Writer, entries []service.RegistryEntry) error {
 	return flush(table)
 }
 
+// writeProbeReports prints what every mirror answered, grouped by app and
+// quickest first, the way Doctor already ordered them.
+func writeProbeReports(w io.Writer, reports []service.ProbeReport) error {
+	if len(reports) == 0 {
+		fmt.Fprintln(w, "no registry sources are known")
+		return nil
+	}
+
+	table := newTable(w)
+	fmt.Fprintln(table, "APP\tREGION\tURL\tLATENCY\tSTATUS")
+	for _, report := range reports {
+		latency := formatLatency(report.Latency)
+		status := report.Status
+		if !report.OK() {
+			// A failed probe's latency only says how long it took to give up,
+			// which is worse than saying nothing.
+			latency = unknownValue
+			status = "error: " + probeReason(report)
+		}
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", report.App, report.Region, report.URL, latency, status)
+	}
+	return flush(table)
+}
+
+// probeReason is the short explanation shown in the STATUS column.
+func probeReason(report service.ProbeReport) string {
+	if report.Reason != "" {
+		return report.Reason
+	}
+	if report.Err != nil {
+		return report.Err.Error()
+	}
+	return "unreachable"
+}
+
+// formatLatency renders a measured round trip at a precision that means
+// something: a network measurement's microseconds are noise, but a local mirror
+// can answer in well under a millisecond.
+func formatLatency(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return unknownValue
+	case d < time.Millisecond:
+		return d.Round(10 * time.Microsecond).String()
+	default:
+		return d.Round(time.Millisecond).String()
+	}
+}
+
 // writeUseResult prints what a `use` run did, or would do: one row per app and,
 // for a dry run, the unified diff of every file that would be rewritten.
 func writeUseResult(w io.Writer, result *service.UseResult) error {
@@ -78,9 +127,23 @@ func writeUseResult(w io.Writer, result *service.UseResult) error {
 		fmt.Fprintln(w, "dry run: no configuration was changed")
 	}
 
+	// A run that chose the regions itself owes the user a column saying which
+	// ones it chose, and how quick they were.
+	showRegion := result.Fastest
+
 	table := newTable(w)
-	fmt.Fprintln(table, "APP\tFROM\tTO\tRESULT")
+	if showRegion {
+		fmt.Fprintln(table, "APP\tREGION\tFROM\tTO\tRESULT")
+	} else {
+		fmt.Fprintln(table, "APP\tFROM\tTO\tRESULT")
+	}
 	for _, change := range result.Changes {
+		if showRegion {
+			fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n",
+				change.App, chosenRegion(change), orUnknown(change.From), orUnknown(change.To),
+				changeOutcome(change, result.DryRun))
+			continue
+		}
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n",
 			change.App, orUnknown(change.From), orUnknown(change.To), changeOutcome(change, result.DryRun))
 	}
@@ -160,6 +223,18 @@ func changeOutcome(change service.ChangeResult, dryRun bool) string {
 	default:
 		return "changed"
 	}
+}
+
+// chosenRegion renders the region --fastest settled on, with the latency that
+// won it the job.
+func chosenRegion(change service.ChangeResult) string {
+	if change.Region == "" {
+		return unknownValue
+	}
+	if change.Latency <= 0 {
+		return change.Region
+	}
+	return fmt.Sprintf("%s (%s)", change.Region, formatLatency(change.Latency))
 }
 
 func orUnknown(value string) string {

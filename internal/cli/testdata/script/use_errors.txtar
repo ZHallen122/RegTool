@@ -14,9 +14,9 @@ stderr 'unknown app "deno"'
 # Nothing above touched the configuration.
 cmp $HOME/.npmrc npmrc
 
-# use needs at least a region.
+# use needs at least a region, and says which ones there are.
 ! exec regtool use
-stderr 'requires at least 1 arg'
+stderr 'use needs a region \(us, cn, eu\)'
 
 # There is nothing to undo yet.
 ! exec regtool undo

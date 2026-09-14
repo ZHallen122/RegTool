@@ -2,27 +2,40 @@ package cli
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/ZHallen122/RegTool/internal/service"
 
 	"github.com/spf13/cobra"
 )
 
 func newUseCommand() *cobra.Command {
 	var (
-		dryRun bool
-		asJSON bool
+		dryRun  bool
+		asJSON  bool
+		fastest bool
 	)
 
 	cmd := &cobra.Command{
-		Use:   "use <region> [app...]",
+		Use:   "use <region|--fastest> [app...]",
 		Short: "Point package managers at a region's mirrors",
 		Long: "use switches the named apps to the mirrors of a region.\n" +
 			"With no app names every installed app is switched.\n\n" +
+			"With --fastest the region is left out and regtool picks it: it probes\n" +
+			"every region's mirror of every selected app at once and points each app\n" +
+			"at whichever of its own mirrors answered quickest, so different apps can\n" +
+			"end up in different regions.\n\n" +
 			"Every file that is about to change is snapshotted first, so the whole\n" +
 			"run can be rolled back with `regtool undo`. With --dry-run nothing is\n" +
 			"written and the diff of every file is printed instead.",
-		Args: cobra.MinimumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, err := loadService(cmd.Context())
+			region, apps, err := useTargets(args, fastest)
+			if err != nil {
+				return err
+			}
+
+			svc, err := loadProbingService(cmd.Context(), 0, 0)
 			if err != nil {
 				return err
 			}
@@ -30,7 +43,15 @@ func newUseCommand() *cobra.Command {
 			// A validation failure comes back without a result and there is
 			// nothing to print; anything else is reported per app, so the
 			// table is printed before the error is returned.
-			result, useErr := svc.Use(cmd.Context(), args[0], args[1:], dryRun)
+			var (
+				result *service.UseResult
+				useErr error
+			)
+			if fastest {
+				result, useErr = svc.UseFastest(cmd.Context(), apps, dryRun)
+			} else {
+				result, useErr = svc.Use(cmd.Context(), region, apps, dryRun)
+			}
 			if result == nil {
 				return useErr
 			}
@@ -48,7 +69,28 @@ func newUseCommand() *cobra.Command {
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show the diff of every change without writing anything")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the result as JSON")
+	cmd.Flags().BoolVar(&fastest, "fastest", false, "probe every region and pick the quickest mirror for each app")
 	return cmd
+}
+
+// useTargets splits the positional arguments of `use` into the region and the
+// apps. The region is the first argument unless --fastest was passed, in which
+// case there is no region to give and every argument is an app.
+func useTargets(args []string, fastest bool) (region string, apps []string, err error) {
+	if !fastest {
+		if len(args) == 0 {
+			return "", nil, fmt.Errorf("use needs a region (%s), or --fastest to measure them and pick one",
+				strings.Join(service.Regions(), ", "))
+		}
+		return args[0], args[1:], nil
+	}
+
+	for _, arg := range args {
+		if service.IsRegion(arg) {
+			return "", nil, fmt.Errorf("--fastest chooses the region itself: drop %q or drop --fastest", arg)
+		}
+	}
+	return "", args, nil
 }
 
 func newStatusCommand() *cobra.Command {

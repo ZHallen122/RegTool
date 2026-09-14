@@ -1,0 +1,42 @@
+# doctor probes every region's mirror and reports how each one answered.
+# The sources file the test harness wrote names three mirrors: us is a fast
+# local server, cn is the same server made to wait, and eu is a closed port.
+env REGTOOL_SOURCES_FILE=$PROBE_SOURCES
+
+exec regtool doctor npm
+! stderr .
+stdout '^APP\s+REGION\s+URL\s+LATENCY\s+STATUS$'
+
+# The quickest reachable mirror comes first and the dead one is last.
+stdout '(?s)npm\s+us\s+http://127\.0\.0\.1.*npm\s+cn\s+http://127\.0\.0\.1.*npm\s+eu\s+http://127\.0\.0\.1'
+stdout '^npm\s+us\s+\S+\s+\S+\s+ok$'
+stdout '^npm\s+cn\s+\S+\s+\S+\s+ok$'
+stdout '^npm\s+eu\s+\S+\s+-\s+error: .+$'
+
+# One mirror answered, so the command succeeded.
+exec regtool doctor npm --json
+! stderr .
+stdout '"app": "npm"'
+stdout '"region": "us"'
+stdout '"status": "ok"'
+stdout '"status": "error"'
+stdout '"latencyMs":'
+stdout '"error": ".+"'
+
+# The flags are validated before anything is probed.
+! exec regtool doctor --concurrency 0
+stderr 'concurrency must be at least 1'
+! stdout .
+
+! exec regtool doctor --timeout 0s
+stderr 'timeout must be positive'
+! stdout .
+
+# An app regtool has no backend for is an error, not an empty table.
+! exec regtool doctor deno
+stderr 'unknown app "deno"'
+
+# A short timeout is enough for the fast mirror and not for the slow one.
+exec regtool doctor npm --timeout 100ms --concurrency 2
+stdout '^npm\s+us\s+\S+\s+\S+\s+ok$'
+stdout '^npm\s+cn\s+\S+\s+-\s+error: timed out$'

@@ -1,15 +1,21 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ZHallen122/RegTool/internal/cli"
 	"github.com/ZHallen122/RegTool/source"
+	"github.com/ZHallen122/RegTool/source/structs"
 
 	"github.com/rogpeppe/go-internal/testscript"
 )
@@ -29,11 +35,85 @@ func TestMain(m *testing.M) {
 }
 
 func TestScripts(t *testing.T) {
+	// regtool runs in a subprocess, so the mirrors the probing commands are
+	// pointed at have to be real listeners rather than an injected client.
+	// These two live for the whole run and every script gets a sources file
+	// naming them.
+	mirrors := startMirrors(t)
+
 	testscript.Run(t, testscript.Params{
 		Dir:                 filepath.Join("testdata", "script"),
 		RequireExplicitExec: true,
-		Setup:               setup,
+		Setup: func(env *testscript.Env) error {
+			if err := setup(env); err != nil {
+				return err
+			}
+			return mirrors.seed(env)
+		},
 	})
+}
+
+// mirrorServers is a fast mirror, a deliberately slow one and an address
+// nothing listens on: everything `regtool doctor` has to tell apart.
+type mirrorServers struct {
+	fast string
+	slow string
+	dead string
+}
+
+// slowMirrorDelay is long enough that the fast mirror always wins, and short
+// enough to stay well inside the default probe timeout.
+const slowMirrorDelay = 200 * time.Millisecond
+
+func startMirrors(t *testing.T) mirrorServers {
+	t.Helper()
+
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(fast.Close)
+
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(slowMirrorDelay)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(slow.Close)
+
+	// A port that was handed out and immediately given back refuses
+	// connections, which is what an unreachable mirror looks like.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to open a listener: %v", err)
+	}
+	dead := "http://" + listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("failed to close the listener: %v", err)
+	}
+
+	return mirrorServers{fast: fast.URL, slow: slow.URL, dead: dead}
+}
+
+// seed writes a sources file naming the three mirrors into the script's work
+// directory and points $PROBE_SOURCES at it. A script that wants to probe sets
+// REGTOOL_SOURCES_FILE to it; the others never notice.
+func (m mirrorServers) seed(env *testscript.Env) error {
+	sources := structs.RegistrySources{
+		// us is the quickest, cn is slow but alive, eu is dead.
+		structs.US: {"npm": {m.fast}, "yarn": {m.fast}},
+		structs.CN: {"npm": {m.slow}, "yarn": {m.slow}},
+		structs.EU: {"npm": {m.dead}, "yarn": {m.dead}},
+	}
+	raw, err := json.MarshalIndent(sources, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode the test sources: %w", err)
+	}
+
+	path := filepath.Join(env.WorkDir, "probe-sources.json")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		return fmt.Errorf("failed to write the test sources: %w", err)
+	}
+	env.Setenv("PROBE_SOURCES", path)
+	return nil
 }
 
 // setup points every path regtool reads at the script's own work directory, so

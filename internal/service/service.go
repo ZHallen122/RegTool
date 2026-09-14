@@ -16,11 +16,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ZHallen122/RegTool/internal/backend"
 	"github.com/ZHallen122/RegTool/internal/history"
+	"github.com/ZHallen122/RegTool/internal/probe"
 	"github.com/ZHallen122/RegTool/source"
 	"github.com/ZHallen122/RegTool/source/localdata"
 	"github.com/ZHallen122/RegTool/source/structs"
@@ -114,18 +117,77 @@ type ChangeResult struct {
 	Noop bool `json:"noop"`
 	// Diff is the unified diff of the configuration file, empty for a no-op.
 	Diff string `json:"diff,omitempty"`
+	// Region is the region the app was pointed at. It is only filled in when
+	// the region was chosen for the user, by [Service.UseFastest]; a plain
+	// [Service.Use] leaves it empty because the caller already knows it.
+	Region string `json:"region,omitempty"`
+	// Latency is how long Region's mirror took to answer when it was probed,
+	// zero outside a UseFastest run. It is rendered as latencyMs by --json.
+	Latency time.Duration `json:"-"`
 	// Err records a failure for this app only; the other apps are still
 	// attempted.
 	Err error `json:"-"`
 }
 
-// MarshalJSON renders Err as a plain string so the struct survives --json.
+// MarshalJSON renders Err as a plain string and Latency in milliseconds, so the
+// struct survives --json.
 func (c ChangeResult) MarshalJSON() ([]byte, error) {
 	type plain ChangeResult
 	return json.Marshal(struct {
 		plain
-		Error string `json:"error,omitempty"`
-	}{plain(c), errorText(c.Err)})
+		LatencyMs float64 `json:"latencyMs,omitempty"`
+		Error     string  `json:"error,omitempty"`
+	}{plain(c), milliseconds(c.Latency), errorText(c.Err)})
+}
+
+// ProbeReport is how one mirror answered when `regtool doctor` tried it.
+type ProbeReport struct {
+	// App is the package manager the mirror serves.
+	App string `json:"app"`
+	// Region is the region the mirror belongs to.
+	Region string `json:"region"`
+	// URL is the mirror that was probed.
+	URL string `json:"url"`
+	// Latency is how long the mirror took to answer, or how long it took to
+	// fail. It is rendered as latencyMs by --json.
+	Latency time.Duration `json:"-"`
+	// StatusCode is the HTTP status the mirror answered with, 0 when the
+	// request never got that far.
+	StatusCode int `json:"statusCode,omitempty"`
+	// Status is "ok" for a mirror that can be used and "error" for one that
+	// cannot.
+	Status string `json:"status"`
+	// Reason is a short description of why the mirror is unusable, empty when
+	// it is fine.
+	Reason string `json:"reason,omitempty"`
+	// Err is the full failure, for a caller that wants more than Reason.
+	Err error `json:"-"`
+}
+
+// OK reports whether the mirror can be used.
+func (r ProbeReport) OK() bool { return r.Status == probeStatusOK }
+
+// MarshalJSON renders Err as a plain string and Latency in milliseconds, so the
+// struct survives --json.
+func (r ProbeReport) MarshalJSON() ([]byte, error) {
+	type plain ProbeReport
+	return json.Marshal(struct {
+		plain
+		LatencyMs float64 `json:"latencyMs"`
+		Error     string  `json:"error,omitempty"`
+	}{plain(r), milliseconds(r.Latency), errorText(r.Err)})
+}
+
+// The two values ProbeReport.Status takes.
+const (
+	probeStatusOK    = "ok"
+	probeStatusError = "error"
+)
+
+// milliseconds renders a duration for JSON, rounded to a tenth of a
+// millisecond: the extra digits of a network measurement are noise.
+func milliseconds(d time.Duration) float64 {
+	return math.Round(float64(d)/float64(time.Millisecond)*10) / 10
 }
 
 // UseResult is the outcome of a whole `use` run.
@@ -137,6 +199,10 @@ type UseResult struct {
 	SnapshotID string `json:"snapshotId,omitempty"`
 	// DryRun reports that nothing was written.
 	DryRun bool `json:"dryRun"`
+	// Fastest reports that regtool chose the regions itself, by measuring them.
+	// It is what tells a front end that ChangeResult.Region is worth showing,
+	// even for an app whose region could not be chosen at all.
+	Fastest bool `json:"fastest,omitempty"`
 }
 
 // Err folds the per-app failures into a single error.
@@ -164,6 +230,7 @@ type Service struct {
 	sources   *structs.RegistrySources
 	switchers []switcher
 	history   *history.Store
+	probeOpts probe.Options
 }
 
 // An Option tweaks how a Service is built.
@@ -174,6 +241,14 @@ type Option func(*Service)
 // commands instead of by editing a configuration file.
 func WithHomebrew() Option {
 	return func(s *Service) { s.switchers = append(s.switchers, newHomebrewSwitcher()) }
+}
+
+// WithProbeOptions sets how [Service.Doctor] and [Service.UseFastest] probe the
+// mirrors. Every zero field keeps the probe package's default, so a caller that
+// only cares about the timeout can set just that; tests pass an
+// [net/http.Client] pointing at their own server.
+func WithProbeOptions(opts probe.Options) Option {
+	return func(s *Service) { s.probeOpts = opts }
 }
 
 // New builds a Service from an already loaded set of mirrors, the backends it
@@ -194,8 +269,9 @@ func New(sources *structs.RegistrySources, backends []backend.Backend, store *hi
 
 // Load builds the Service the commands run against: the mirrors reachable in
 // ctx, every file backend this build knows about plus homebrew, and the
-// snapshot store under the user's configuration directory.
-func Load(ctx context.Context) (*Service, error) {
+// snapshot store under the user's configuration directory. Any extra options
+// are applied after those, so a caller can add its own probe settings.
+func Load(ctx context.Context, opts ...Option) (*Service, error) {
 	sources, err := source.LoadRegistrySources(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load registry sources: %w", err)
@@ -204,7 +280,16 @@ func Load(ctx context.Context) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate the snapshot history: %w", err)
 	}
-	return New(sources, backend.All(backend.DefaultEnv()), store, WithHomebrew()), nil
+	return New(sources, backend.All(backend.DefaultEnv()), store, append([]Option{WithHomebrew()}, opts...)...), nil
+}
+
+// Regions returns the regions `use` accepts, in menu order.
+func Regions() []string { return structs.AllRegionStrings() }
+
+// IsRegion reports whether name is one of the regions `use` accepts.
+func IsRegion(name string) bool {
+	_, ok := structs.StringToRegion(name)
+	return ok
 }
 
 // Status reports, for every app that is installed, the registry it currently
@@ -308,7 +393,6 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 	if !ok {
 		return nil, fmt.Errorf("unknown region %q: supported regions are %s", region, strings.Join(structs.AllRegionStrings(), ", "))
 	}
-	regionSources := (*s.sources)[regionValue]
 
 	targets, err := s.resolveApps(apps)
 	if err != nil {
@@ -318,12 +402,86 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 		return nil, err
 	}
 
-	result := &UseResult{Changes: make([]ChangeResult, 0, len(targets)), DryRun: dryRun}
+	picks := make([]pick, 0, len(targets))
+	for _, sw := range targets {
+		picks = append(picks, pick{switcher: sw, region: string(regionValue)})
+	}
+	// The user named the region, so there is nothing to report back about it.
+	return s.apply(ctx, picks, dryRun, false, "use "+region)
+}
+
+// UseFastest probes every region's mirror of every selected app and points each
+// app at whichever of its mirrors answered quickest. App selection follows the
+// same rules as [Service.Use]: an empty apps slice means every installed app.
+//
+// The probing is concurrent across all apps and regions at once, and the whole
+// run still takes a single snapshot. An app with no reachable mirror is
+// reported as a failure against that app alone; the others are still switched.
+func (s *Service) UseFastest(ctx context.Context, apps []string, dryRun bool) (*UseResult, error) {
+	targets, err := s.resolveApps(apps)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	results := probe.Run(ctx, s.targetsFor(targets), s.probeOpts)
+
+	byApp := make(map[string][]probe.Result, len(targets))
+	for _, result := range results {
+		byApp[result.App] = append(byApp[result.App], result)
+	}
+
+	picks := make([]pick, 0, len(targets))
+	for _, sw := range targets {
+		tried := byApp[sw.Name()]
+		best, ok := probe.Fastest(tried)
+		if !ok {
+			picks = append(picks, pick{switcher: sw, err: unreachableError(sw.Name(), tried)})
+			continue
+		}
+		picks = append(picks, pick{switcher: sw, region: best.Region, latency: best.Latency})
+	}
+	return s.apply(ctx, picks, dryRun, true, "use --fastest")
+}
+
+// unreachableError explains why no mirror could be chosen for an app.
+func unreachableError(app string, tried []probe.Result) error {
+	if len(tried) == 0 {
+		return fmt.Errorf("no %s mirror is known for any region", app)
+	}
+	reasons := make([]string, 0, len(tried))
+	for _, result := range tried {
+		reasons = append(reasons, fmt.Sprintf("%s (%s)", result.Region, result.Reason()))
+	}
+	return fmt.Errorf("no reachable %s mirror: %s", app, strings.Join(reasons, ", "))
+}
+
+// pick is one app together with the region it should be pointed at. Use fills
+// in the region the user asked for; UseFastest fills in the one it measured,
+// or the reason it could not pick any.
+type pick struct {
+	switcher switcher
+	region   string
+	latency  time.Duration
+	// err is set when this app cannot be switched at all, which is reported
+	// against it without stopping the others.
+	err error
+}
+
+// apply plans every pick, snapshots the files they touch and writes them. It is
+// the shared tail of Use and UseFastest: the only difference between the two is
+// how the regions were chosen, and whether the result should say so, which is
+// what reportRegion controls.
+func (s *Service) apply(ctx context.Context, picks []pick, dryRun, reportRegion bool, note string) (*UseResult, error) {
+	result := &UseResult{Changes: make([]ChangeResult, 0, len(picks)), DryRun: dryRun, Fastest: reportRegion}
 
 	// pending is a change that is not a no-op, kept with the index of the
 	// result it belongs to so a failure can be reported against the right app.
 	type pending struct {
 		index  int
+		region string
 		change change
 	}
 	var (
@@ -331,23 +489,34 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 		paths   []string
 	)
 
-	for _, sw := range targets {
+	for _, p := range picks {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		outcome := ChangeResult{App: sw.Name()}
-		urls := regionSources[sourceKey(sw.Name())]
-		if len(urls) == 0 {
-			outcome.Err = fmt.Errorf("region %s ships no %s mirror", region, sw.Name())
+		name := p.switcher.Name()
+		outcome := ChangeResult{App: name}
+		if reportRegion {
+			outcome.Region, outcome.Latency = p.region, p.latency
+		}
+		if p.err != nil {
+			outcome.Err = p.err
 			result.Changes = append(result.Changes, outcome)
 			continue
 		}
 
-		next, err := sw.Plan(urls[0], regionSources)
+		regionSources := (*s.sources)[structs.Region(p.region)]
+		urls := regionSources[sourceKey(name)]
+		if len(urls) == 0 {
+			outcome.Err = fmt.Errorf("region %s ships no %s mirror", p.region, name)
+			result.Changes = append(result.Changes, outcome)
+			continue
+		}
+
+		next, err := p.switcher.Plan(urls[0], regionSources)
 		if err != nil {
 			outcome.To = urls[0]
-			outcome.Err = fmt.Errorf("failed to plan the %s change: %w", sw.Name(), err)
+			outcome.Err = fmt.Errorf("failed to plan the %s change: %w", name, err)
 			result.Changes = append(result.Changes, outcome)
 			continue
 		}
@@ -361,7 +530,7 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 		result.Changes = append(result.Changes, outcome)
 
 		if !outcome.Noop {
-			planned = append(planned, pending{index: len(result.Changes) - 1, change: next})
+			planned = append(planned, pending{index: len(result.Changes) - 1, region: p.region, change: next})
 			paths = append(paths, next.Paths()...)
 		}
 	}
@@ -373,7 +542,7 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 	if s.history == nil {
 		return result, errors.New("refusing to change anything: no snapshot history is configured")
 	}
-	snapshot, err := s.history.Save(ctx, "use "+region, paths)
+	snapshot, err := s.history.Save(ctx, note, paths)
 	if err != nil {
 		return result, fmt.Errorf("failed to snapshot the configuration before changing it: %w", err)
 	}
@@ -384,10 +553,116 @@ func (s *Service) Use(ctx context.Context, region string, apps []string, dryRun 
 			return result, err
 		}
 		if err := p.change.Apply(); err != nil {
-			result.Changes[p.index].Err = fmt.Errorf("failed to point %s at the %s mirror: %w", result.Changes[p.index].App, region, err)
+			result.Changes[p.index].Err = fmt.Errorf("failed to point %s at the %s mirror: %w", result.Changes[p.index].App, p.region, err)
 		}
 	}
 	return result, result.Err()
+}
+
+// Doctor probes every region's mirror of every selected app and reports how each
+// one answered. An empty apps slice means every app regtool knows about,
+// installed or not: the question doctor answers is about the mirrors, not about
+// this machine.
+//
+// The reports are grouped by app in the order the apps were selected, quickest
+// mirror first within each app and unreachable ones last. A mirror that failed
+// is a report with Status "error", not an error return; the error is reserved
+// for an unknown app name and for a cancelled context.
+func (s *Service) Doctor(ctx context.Context, apps []string) ([]ProbeReport, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	selected, err := s.probeSwitchers(apps)
+	if err != nil {
+		return nil, err
+	}
+
+	order := make(map[string]int, len(selected))
+	for i, sw := range selected {
+		order[sw.Name()] = i
+	}
+
+	results := probe.Run(ctx, s.targetsFor(selected), s.probeOpts)
+
+	reports := make([]ProbeReport, 0, len(results))
+	for _, result := range results {
+		reports = append(reports, newProbeReport(result))
+	}
+
+	sort.SliceStable(reports, func(i, j int) bool {
+		left, right := reports[i], reports[j]
+		if left.App != right.App {
+			return order[left.App] < order[right.App]
+		}
+		// Within an app the usable mirrors come first, quickest first, and the
+		// dead ones are parked at the end where their latency means nothing.
+		if left.OK() != right.OK() {
+			return left.OK()
+		}
+		if !left.OK() {
+			return left.Region < right.Region
+		}
+		if left.Latency != right.Latency {
+			return left.Latency < right.Latency
+		}
+		return left.Region < right.Region
+	})
+	return reports, nil
+}
+
+// newProbeReport turns a raw probe result into the report the front ends render.
+func newProbeReport(result probe.Result) ProbeReport {
+	report := ProbeReport{
+		App:        result.App,
+		Region:     result.Region,
+		URL:        result.URL,
+		Latency:    result.Latency,
+		StatusCode: result.StatusCode,
+		Status:     probeStatusOK,
+	}
+	if result.OK() {
+		return report
+	}
+
+	report.Status = probeStatusError
+	report.Reason = result.Reason()
+	report.Err = result.Err
+	if report.Err == nil {
+		// A 5xx is a failure without a transport error behind it.
+		report.Err = fmt.Errorf("%s answered with HTTP %d", result.URL, result.StatusCode)
+	}
+	return report
+}
+
+// targetsFor lists every mirror worth probing for the given switchers: one per
+// region that ships a mirror for that app.
+func (s *Service) targetsFor(switchers []switcher) []probe.Target {
+	targets := make([]probe.Target, 0, len(switchers)*len(structs.AllRegions()))
+	for _, sw := range switchers {
+		key := sourceKey(sw.Name())
+		for _, region := range structs.AllRegions() {
+			urls := (*s.sources)[region][key]
+			if len(urls) == 0 {
+				continue
+			}
+			targets = append(targets, probe.Target{App: sw.Name(), Region: string(region), URL: urls[0]})
+		}
+	}
+	return targets
+}
+
+// probeSwitchers resolves the apps a probing command was asked about. Unlike
+// [Service.resolveApps] an empty list means every known app rather than every
+// installed one: a mirror is worth measuring whether or not its package manager
+// happens to be on this machine.
+func (s *Service) probeSwitchers(apps []string) ([]switcher, error) {
+	if len(apps) == 0 {
+		out := make([]switcher, len(s.switchers))
+		copy(out, s.switchers)
+		return out, nil
+	}
+	return s.resolveApps(apps)
 }
 
 // History returns every snapshot taken so far, newest first.
