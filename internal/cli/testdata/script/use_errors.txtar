@@ -1,22 +1,33 @@
-# an unknown region is rejected before anything is touched.
+# An unknown region is rejected before anything is planned.
+cp npmrc $HOME/.npmrc
+
 ! exec regtool use xx
 stderr 'unknown region "xx"'
 stderr 'us, cn, eu'
 ! stdout .
 
-# so is an unknown app.
-! exec regtool use cn cargo
-stderr 'unknown app "cargo"'
+# So is an app regtool has no backend for.
+! exec regtool use cn deno
+stderr 'unknown app "deno"'
 ! stdout .
 
-# nothing above changed anything.
-exec regtool status
-stdout '^npm\s+us\s+https://registry\.npmjs\.org/$'
+# Nothing above touched the configuration.
+cmp $HOME/.npmrc npmrc
 
 # use needs at least a region.
 ! exec regtool use
 stderr 'requires at least 1 arg'
 
-# an unknown subcommand is an error too.
+# There is nothing to undo yet.
+! exec regtool undo
+stderr 'nothing to undo'
+
+! exec regtool undo nosuchsnapshot
+stderr 'snapshot not found'
+
+# An unknown subcommand is an error too.
 ! exec regtool nosuchcommand
 stderr 'unknown command "nosuchcommand"'
+
+-- npmrc --
+registry=https://registry.npmjs.org

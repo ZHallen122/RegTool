@@ -1,14 +1,29 @@
-# list <app> narrows the output to a single package manager.
+# list <app> narrows the output to a single package manager. cargo and go are
+# backends of their own now, not just names in the sources file.
+exec regtool list cargo
+! stderr .
+cmp stdout cargo.txt
+
 exec regtool list npm
 ! stderr .
-cmp stdout expected.txt
+cmp stdout npm.txt
 
-# an app nobody ships a mirror for is an error on stderr, with exit code 1.
-! exec regtool list cargo
-stderr 'unknown app "cargo"'
+# An alias resolves to the backend it names.
+exec regtool list golang
+! stderr .
+stdout '^go\s+cn\s+https://goproxy\.cn$'
+
+# An app nobody ships a mirror for is an error on stderr, with exit code 1.
+! exec regtool list deno
+stderr 'unknown app "deno"'
 ! stdout .
 
--- expected.txt --
+-- cargo.txt --
+APP    REGION  URL
+cargo  cn      sparse+https://rsproxy.cn/index/
+cargo  eu      sparse+https://index.crates.io/
+cargo  us      sparse+https://index.crates.io/
+-- npm.txt --
 APP  REGION  URL
 npm  cn      https://registry.npmmirror.com
 npm  eu      https://registry.npmjs.org

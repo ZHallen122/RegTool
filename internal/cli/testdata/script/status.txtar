@@ -1,18 +1,30 @@
-# status matches a known mirror to its region and falls back to "local".
+# An empty home directory has no package manager to report on.
 exec regtool status
 ! stderr .
-cmp stdout expected.txt
+stdout '^no supported package manager was found on this machine$'
+
+# status reads the configuration files directly, so it works without npm or gem
+# being installed at all.
+cp npmrc $HOME/.npmrc
+cp gemrc $HOME/.gemrc
+
+exec regtool status
+! stderr .
+stdout '^APP\s+REGION\s+URL$'
+stdout '^npm\s+us\s+https://registry\.npmjs\.org/$'
+stdout '^gem\s+local\s+https://gems\.example\.com$'
 
 # --json writes the same thing to stdout and nothing to stderr.
 exec regtool status --json
 ! stderr .
 stdout '"app": "npm"'
 stdout '"region": "us"'
-stdout '"url": "https://registry.npmjs.org/"'
-stdout '"app": "pip"'
+stdout '"app": "gem"'
 stdout '"region": "local"'
 
--- expected.txt --
-APP  REGION  URL
-npm  us      https://registry.npmjs.org/
-pip  local   https://pypi.example.com/simple
+-- npmrc --
+registry=https://registry.npmjs.org/
+-- gemrc --
+---
+:sources:
+  - https://gems.example.com

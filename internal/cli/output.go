@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"text/tabwriter"
+	"time"
 
+	"github.com/ZHallen122/RegTool/internal/history"
 	"github.com/ZHallen122/RegTool/internal/service"
 )
 
@@ -84,6 +88,64 @@ func writeUseResult(w io.Writer, result *service.UseResult) error {
 		return err
 	}
 
+	if result.DryRun {
+		for _, change := range result.Changes {
+			if change.Diff == "" {
+				continue
+			}
+			fmt.Fprintf(w, "\n%s:\n%s", change.App, change.Diff)
+		}
+		return nil
+	}
+
+	if result.SnapshotID != "" {
+		fmt.Fprintf(w, "\nsnapshot %s: run 'regtool undo' to put it back\n", result.SnapshotID)
+	}
+	return nil
+}
+
+// writeSnapshots prints the snapshot history, newest first.
+func writeSnapshots(w io.Writer, snapshots []history.Snapshot) error {
+	if len(snapshots) == 0 {
+		fmt.Fprintln(w, "regtool has not changed anything yet")
+		return nil
+	}
+
+	table := newTable(w)
+	fmt.Fprintln(table, "ID\tCREATED\tNOTE\tFILES")
+	for _, snapshot := range snapshots {
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n",
+			snapshot.ID,
+			snapshot.CreatedAt.Local().Format(time.RFC3339),
+			orUnknown(snapshot.Note),
+			snapshotFiles(snapshot))
+	}
+	return flush(table)
+}
+
+// snapshotFiles names the files a snapshot captured, by base name so the table
+// stays readable.
+func snapshotFiles(snapshot history.Snapshot) string {
+	if len(snapshot.Files) == 0 {
+		return unknownValue
+	}
+	names := make([]string, 0, len(snapshot.Files))
+	for _, file := range snapshot.Files {
+		names = append(names, filepath.Base(file.Path))
+	}
+	return strings.Join(names, ", ")
+}
+
+// writeRestored reports what an undo put back.
+func writeRestored(w io.Writer, snapshot *history.Snapshot) error {
+	fmt.Fprintf(w, "restored snapshot %s (%s)\n", snapshot.ID, orUnknown(snapshot.Note))
+	for _, file := range snapshot.Files {
+		state := "restored"
+		if !file.Existed {
+			state = "removed"
+		}
+		fmt.Fprintf(w, "  %s %s\n", state, file.Path)
+	}
 	return nil
 }
 

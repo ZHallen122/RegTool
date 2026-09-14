@@ -54,6 +54,8 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		newUseCommand(),
 		newStatusCommand(),
 		newListCommand(),
+		newHistoryCommand(),
+		newUndoCommand(),
 		newRefreshCommand(),
 		newVersionCommand(),
 	)
