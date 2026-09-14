@@ -261,7 +261,13 @@ regtool list npm
 
 ## Demo
 
-<!-- TODO: asciinema/VHS demo -->
+![RegTool demo](./assets/demo.gif)
+
+The recording is a [VHS](https://github.com/charmbracelet/vhs) tape,
+[`demo/demo.tape`](./demo/demo.tape): `make demo` builds a linux binary, runs
+the tape against a throwaway `$HOME` in the VHS container and writes
+`assets/demo.gif` again, so the GIF is regenerated from the repository rather
+than re-recorded by hand.
 
 ## Development
 

@@ -1,6 +1,11 @@
-.PHONY: build hub hub-run test vet lint snapshot install compose-up compose-down
+.PHONY: build hub hub-run test vet lint snapshot install compose-up compose-down demo
 
 COMPOSE := docker compose -f deploy/docker-compose.yml
+
+# The tape is rendered in the official VHS container so nothing has to be
+# installed locally. The tag is pinned: the image bundles its own Chromium, and
+# a newer one has broken frame capture before.
+VHS_IMAGE ?= ghcr.io/charmbracelet/vhs:v0.10.0
 
 PKG := github.com/ZHallen122/RegTool/internal/cli
 VERSION ?= $(shell git describe --tags --always --dirty)
@@ -31,6 +36,13 @@ snapshot:
 
 install:
 	go install -ldflags "$(LDFLAGS)" .
+
+# Re-records assets/demo.gif from demo/demo.tape. The tape runs inside the
+# container, so the binary it drives is built for linux/amd64 and left in demo/,
+# which is on the PATH the tape sets up.
+demo:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o demo/regtool .
+	docker run --rm -v "$(CURDIR):/vhs" $(VHS_IMAGE) demo/demo.tape
 
 compose-up:
 	$(COMPOSE) up -d --build
