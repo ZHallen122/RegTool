@@ -67,24 +67,29 @@ archives:
       - README.md
       - LICENSE
 
-dockers:
+dockers_v2:
   - id: hub
+    # Only the hub binary goes into the image. Without this the CLI binary
+    # would be copied into the build context too, for no reason.
     ids: [hub]
-    goos: linux
-    goarch: amd64
+    images:
+      - "ghcr.io/zhallen122/regtool-hub"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
     dockerfile: Dockerfile.goreleaser
-    image_templates:
-      - "ghcr.io/zhallen122/regtool-hub:{{ .Version }}"
-      - "ghcr.io/zhallen122/regtool-hub:latest"
-    build_flag_templates:
-      - "--label=org.opencontainers.image.title=regtool-hub"
-      - "--label=org.opencontainers.image.description=Serves the regtool mirror list and checks the mirrors in it"
-      - "--label=org.opencontainers.image.url=https://github.com/ZHallen122/RegTool"
-      - "--label=org.opencontainers.image.source=https://github.com/ZHallen122/RegTool"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.licenses=MIT"
+    labels:
+      "org.opencontainers.image.title": "regtool-hub"
+      "org.opencontainers.image.description": "Serves the regtool mirror list and checks the mirrors in it"
+      "org.opencontainers.image.url": "https://github.com/ZHallen122/RegTool"
+      "org.opencontainers.image.source": "https://github.com/ZHallen122/RegTool"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.licenses": "MIT"
 
 checksum:
   name_template: "checksums.txt"
@@ -112,25 +117,33 @@ changelog:
       - '^chore(\(.+\))?:'
       - '^test(\(.+\))?:'
 
-brews:
+homebrew_casks:
   - name: regtool
-    # Only the CLI archive. Without this the formula would try to package the
-    # hub archives too, and `brew install regtool` would start shipping a
+    # Only the CLI archive. Without this the cask would try to package the
+    # hub archives too, and installing regtool would start shipping a
     # server nobody asked for.
     ids: [regtool]
+    binaries:
+      - regtool
     repository:
       owner: ZHallen122
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/ZHallen122/RegTool"
     description: "Switch package manager registries between regional mirrors"
     license: "MIT"
     commit_author:
       name: ZHallen122
       email: zhallen12261@gmail.com
-    test: |
-      system "#{bin}/regtool", "version"
+    # The binaries are not signed or notarized, so without this macOS refuses
+    # to run them with the "regtool is damaged" Gatekeeper error.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/regtool"]
+          end
 
 scoops:
   - name: regtool
