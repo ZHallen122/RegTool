@@ -1,4 +1,4 @@
-package cmd
+package tui
 
 import (
 	"github.com/charmbracelet/lipgloss"

@@ -1,0 +1,18 @@
+# status matches a known mirror to its region and falls back to "local".
+exec regtool status
+! stderr .
+cmp stdout expected.txt
+
+# --json writes the same thing to stdout and nothing to stderr.
+exec regtool status --json
+! stderr .
+stdout '"app": "npm"'
+stdout '"region": "us"'
+stdout '"url": "https://registry.npmjs.org/"'
+stdout '"app": "pip"'
+stdout '"region": "local"'
+
+-- expected.txt --
+APP  REGION  URL
+npm  us      https://registry.npmjs.org/
+pip  local   https://pypi.example.com/simple
