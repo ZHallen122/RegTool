@@ -1,8 +1,10 @@
-package cmd
+// Package tui implements the interactive bubbletea interface. Every page is a
+// bubbletea model that registers itself with the package level command
+// registry in its init function; Run starts the main menu.
+package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/ZHallen122/RegTool/source/structs"
@@ -79,11 +81,13 @@ func (m mainMenuModel) View() string {
 
 	return borderedBox(doc.String())
 }
-func Run() {
+
+// Run starts the interactive interface and blocks until the user quits.
+func Run() error {
 	RegisterCommand(mainMenuName, "Main Menu", newMainMenuModel())
 	p := tea.NewProgram(newMainMenuModel())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprint(os.Stderr, errorStyle.Render(fmt.Sprintf("Error: %v\n", err)))
-		os.Exit(1)
+		return fmt.Errorf("failed to run the interactive interface: %w", err)
 	}
+	return nil
 }

@@ -1,0 +1,7 @@
+# version prints the ldflags-settable version and nothing else.
+exec regtool version
+! stderr .
+cmp stdout expected.txt
+
+-- expected.txt --
+dev

@@ -1,0 +1,15 @@
+# list <app> narrows the output to a single package manager.
+exec regtool list npm
+! stderr .
+cmp stdout expected.txt
+
+# an app nobody ships a mirror for is an error on stderr, with exit code 1.
+! exec regtool list cargo
+stderr 'unknown app "cargo"'
+! stdout .
+
+-- expected.txt --
+APP  REGION  URL
+npm  cn      https://registry.npmmirror.com
+npm  eu      https://registry.npmjs.org
+npm  us      https://registry.npmjs.org
