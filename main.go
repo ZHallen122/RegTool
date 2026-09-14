@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/ZHallen122/RegTool/internal/cli"
-	_ "github.com/ZHallen122/RegTool/source/app/all"
 )
 
 func main() {

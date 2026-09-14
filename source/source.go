@@ -1,3 +1,6 @@
+// Package source provides the list of registry mirrors regtool switches
+// between: a remotely maintained sources.json with the copy embedded in the
+// binary as a fallback.
 package source
 
 import (
@@ -10,7 +13,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/ZHallen122/RegTool/common/alias"
 	"github.com/ZHallen122/RegTool/console"
 	"github.com/ZHallen122/RegTool/source/structs"
 )
@@ -86,92 +88,4 @@ func LoadRegistrySources(ctx context.Context) (*structs.RegistrySources, error) 
 		return nil, errors.Join(err, embedErr)
 	}
 	return embedded, nil
-}
-
-// ConvertSources converts sources to a map of package managers to sources
-func ConvertSources(sources *structs.RegistrySources) map[string]Source {
-	result := make(map[string]Source)
-	for region, registryRegion := range *sources {
-		for packageManager, urls := range registryRegion {
-			result[packageManager] = Source{
-				Region: string(region),
-				Url:    urls[0],
-				Name:   packageManager,
-			}
-		}
-	}
-	return result
-}
-
-var SOURCES map[string]Source
-
-func GetRemoteSourcesMap(ctx context.Context) (map[string]Source, error) {
-	sources, err := LoadRegistrySources(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load registry sources: %w", err)
-	}
-	SOURCES = ConvertSources(sources)
-	return SOURCES, nil
-}
-
-type Source struct {
-	Region string
-	Url    string
-	Name   string
-}
-
-var registryManagers = map[string]AppManager{}
-
-// RegisterManager registers a manager for the given names
-func RegisterManager(names []string, manager AppManager) {
-	for _, name := range names {
-		registryManagers[name] = manager
-	}
-}
-
-func UpdateRegistry(region string, app string) error {
-	regionValue, ok := structs.StringToRegion(region)
-	if !ok {
-		return fmt.Errorf("unknown region: %s", region)
-	}
-
-	ctx := context.Background()
-
-	rs, err := LoadRegistrySources(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load registry sources: %w", err)
-	}
-
-	primaryApp := alias.GetPrimary(app)
-	names := append([]string{primaryApp}, alias.GetAllAliases(primaryApp)...)
-
-	var errs []error
-	for _, name := range names {
-		registryManager, ok := registryManagers[name]
-		if !ok {
-			errs = append(errs, fmt.Errorf("no registry manager registered for %q", name))
-			continue
-		}
-
-		if _, err := registryManager.SetRegistry(regionValue, rs); err != nil {
-			errs = append(errs, fmt.Errorf("failed to set %s registry to region %s: %w", name, region, err))
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
-// Get All Registered
-func GetAllRegisteredApp() map[string]AppManager {
-
-	res := make(map[string]AppManager)
-	for _, appName := range alias.GetAllPrimary() {
-		if manager, ok := registryManagers[appName]; ok {
-			if !manager.IsExists() {
-				continue
-			}
-			res[appName] = manager
-		}
-	}
-	return res
 }

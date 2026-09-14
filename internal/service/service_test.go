@@ -71,13 +71,12 @@ func testEnv(t *testing.T) (backend.Env, string) {
 // newTestService builds a Service whose backends and snapshots all live under a
 // temporary directory, and returns it together with the home directory the
 // configuration files go in.
-func newTestService(t *testing.T, extra ...backend.Backend) (*Service, string) {
+func newTestService(t *testing.T) (*Service, string) {
 	t.Helper()
 
 	env, root := testEnv(t)
-	backends := append(backend.All(env), extra...)
 	store := history.New(filepath.Join(root, "history"))
-	return New(testSources(), backends, store), env.Home
+	return New(testSources(), backend.All(env), store), env.Home
 }
 
 // writeFile creates a configuration file under the test home.
