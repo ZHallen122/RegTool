@@ -200,7 +200,7 @@ func newVersionCommand() *cobra.Command {
 		Short: "Print the regtool version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), Version)
+			fmt.Fprintln(cmd.OutOrStdout(), versionString())
 			return nil
 		},
 	}
