@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/ZHallen122/RegTool/source"
 	"log"
-	"regtool/source"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

@@ -1,4 +1,4 @@
-module regtool
+module github.com/ZHallen122/RegTool
 
 go 1.25
 

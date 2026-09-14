@@ -2,11 +2,11 @@ package source
 
 import (
 	"fmt"
+	"github.com/ZHallen122/RegTool/common/alias"
+	"github.com/ZHallen122/RegTool/shell"
+	"github.com/ZHallen122/RegTool/source"
+	"github.com/ZHallen122/RegTool/source/structs"
 	"os/exec"
-	"regtool/common/alias"
-	"regtool/shell"
-	"regtool/source"
-	"regtool/source/structs"
 	"strings"
 )
 

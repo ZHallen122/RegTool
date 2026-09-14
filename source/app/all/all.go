@@ -8,9 +8,9 @@
 package all
 
 import (
-	_ "regtool/source/app/gem"
-	_ "regtool/source/app/homebrew"
-	_ "regtool/source/app/npm"
-	_ "regtool/source/app/pip"
-	_ "regtool/source/app/yarn"
+	_ "github.com/ZHallen122/RegTool/source/app/gem"
+	_ "github.com/ZHallen122/RegTool/source/app/homebrew"
+	_ "github.com/ZHallen122/RegTool/source/app/npm"
+	_ "github.com/ZHallen122/RegTool/source/app/pip"
+	_ "github.com/ZHallen122/RegTool/source/app/yarn"
 )

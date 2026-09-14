@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"regtool/source"
+	"github.com/ZHallen122/RegTool/source"
 	"strings"
 	"time"
 	"unicode"

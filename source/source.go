@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ZHallen122/RegTool/common/alias"
+	"github.com/ZHallen122/RegTool/console"
+	"github.com/ZHallen122/RegTool/source/structs"
 	"net/http"
-	"regtool/common/alias"
-	"regtool/console"
-	"regtool/source/structs"
 	"time"
 )
 

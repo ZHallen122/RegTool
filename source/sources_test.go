@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"regtool/source/structs"
+	"github.com/ZHallen122/RegTool/source/structs"
 )
 
 // withRemote points the package-level sources URL at srv for the duration of

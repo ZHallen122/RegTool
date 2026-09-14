@@ -1,6 +1,6 @@
 package source
 
-import "regtool/source/structs"
+import "github.com/ZHallen122/RegTool/source/structs"
 
 // AppManager is an interface for managing registries.
 // This interface defines methods to get the current registry URL and set the registry URL based on a specified region and sources.

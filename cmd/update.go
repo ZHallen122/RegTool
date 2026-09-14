@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"regtool/source"
+	"github.com/ZHallen122/RegTool/source"
 	"strings"
 	"time"
 

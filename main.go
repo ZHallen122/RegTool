@@ -1,8 +1,8 @@
 package main
 
 import (
-	"regtool/cmd"
-	_ "regtool/source/app/all"
+	"github.com/ZHallen122/RegTool/cmd"
+	_ "github.com/ZHallen122/RegTool/source/app/all"
 )
 
 func main() {

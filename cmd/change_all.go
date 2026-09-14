@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"regtool/source"
+	"github.com/ZHallen122/RegTool/source"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fatih/color"

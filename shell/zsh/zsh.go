@@ -1,6 +1,6 @@
 package zsh
 
-import "regtool/shell"
+import "github.com/ZHallen122/RegTool/shell"
 
 // Zsh represents the zsh shell.
 type Zsh struct{}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regtool/source/localdata"
-	"regtool/source/structs"
+	"github.com/ZHallen122/RegTool/source/localdata"
+	"github.com/ZHallen122/RegTool/source/structs"
 )
 
 //here is the command implementation of the source
