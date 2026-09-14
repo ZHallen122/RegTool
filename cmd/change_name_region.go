@@ -101,7 +101,7 @@ func (m changeNameRegionModel) View() string {
 			if m.cursor == i {
 				cursor = ">" // cursor!
 				boldBlue := color.New(color.FgBlue).Add(color.Bold)
-				line = boldBlue.Sprintf(region)
+				line = boldBlue.Sprint(region)
 			}
 			s += fmt.Sprintf("%s %s\n", cursor, line)
 		}

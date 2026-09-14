@@ -1,12 +1,13 @@
-.PHONY: all generate build
-
-all: generate build
-
-generate:
-	go run tools/gen_initall.go
+.PHONY: build test vet install
 
 build:
-	go build -o regtool main.go
+	go build -o regtool .
 
-install: all
-	sudo install -m 755 regtool /usr/bin/regtool
+test:
+	go test -race ./...
+
+vet:
+	go vet ./...
+
+install:
+	go install .
