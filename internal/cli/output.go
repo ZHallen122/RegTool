@@ -11,10 +11,15 @@ import (
 
 	"github.com/ZHallen122/RegTool/internal/history"
 	"github.com/ZHallen122/RegTool/internal/service"
+	"github.com/ZHallen122/RegTool/source"
 )
 
 // unknownValue stands in for a column the tool could not fill in.
 const unknownValue = "-"
+
+// noneValue stands in for a field that has no value yet, as opposed to one the
+// tool failed to read.
+const noneValue = "none"
 
 // writeJSON prints v as indented JSON. It is the only thing --json writes, and
 // it always writes to stdout.
@@ -199,6 +204,46 @@ func snapshotFiles(snapshot history.Snapshot) string {
 	return strings.Join(names, ", ")
 }
 
+// writeSourcesStatus prints where the mirror list came from, one field per
+// line. It is a two column table rather than a header row because the fields
+// have nothing to do with one another.
+func writeSourcesStatus(w io.Writer, status *source.Status) error {
+	table := newTable(w)
+	fmt.Fprintf(table, "url\t%s\n", status.URL)
+	fmt.Fprintf(table, "origin\t%s\n", status.Origin)
+	fmt.Fprintf(table, "offline\t%s\n", yesNo(status.Offline))
+	if status.File != "" {
+		fmt.Fprintf(table, "file\t%s\n", status.File)
+	}
+	fmt.Fprintf(table, "cache\t%s\n", orNone(status.CachePath))
+	fmt.Fprintf(table, "etag\t%s\n", orNone(status.ETag))
+	fmt.Fprintf(table, "fetched\t%s\n", formatFetchedAt(status.FetchedAt))
+	fmt.Fprintf(table, "regions\t%d\n", status.Regions)
+	fmt.Fprintf(table, "apps\t%d\n", status.Apps)
+	return flush(table)
+}
+
+// writeSourcesRefresh reports what a forced fetch did to the cache.
+func writeSourcesRefresh(w io.Writer, result *source.RefreshResult) error {
+	table := newTable(w)
+	fmt.Fprintf(table, "url\t%s\n", result.URL)
+	fmt.Fprintf(table, "cache\t%s\n", orNone(result.CachePath))
+	fmt.Fprintf(table, "etag\t%s\n", orNone(result.ETag))
+	fmt.Fprintf(table, "fetched\t%s\n", result.FetchedAt.Local().Format(time.RFC3339))
+	fmt.Fprintf(table, "changed\t%s\n", yesNo(result.Changed))
+	fmt.Fprintf(table, "regions\t%d\n", result.Regions)
+	fmt.Fprintf(table, "apps\t%d\n", result.Apps)
+	return flush(table)
+}
+
+// formatFetchedAt renders when the cache was last written, in local time.
+func formatFetchedAt(at *time.Time) string {
+	if at == nil || at.IsZero() {
+		return noneValue
+	}
+	return at.Local().Format(time.RFC3339)
+}
+
 // writeRestored reports what an undo put back.
 func writeRestored(w io.Writer, snapshot *history.Snapshot) error {
 	fmt.Fprintf(w, "restored snapshot %s (%s)\n", snapshot.ID, orUnknown(snapshot.Note))
@@ -242,6 +287,20 @@ func orUnknown(value string) string {
 		return unknownValue
 	}
 	return value
+}
+
+func orNone(value string) string {
+	if value == "" {
+		return noneValue
+	}
+	return value
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
 
 func flush(table *tabwriter.Writer) error {

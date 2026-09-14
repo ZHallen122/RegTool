@@ -40,6 +40,9 @@ func TestScripts(t *testing.T) {
 	// These two live for the whole run and every script gets a sources file
 	// naming them.
 	mirrors := startMirrors(t)
+	// The same goes for the sources document itself: `regtool sources` is
+	// about a real HTTP round trip, so the scripts get a real server.
+	sourcesURL := startSourcesServer(t)
 
 	testscript.Run(t, testscript.Params{
 		Dir:                 filepath.Join("testdata", "script"),
@@ -48,9 +51,41 @@ func TestScripts(t *testing.T) {
 			if err := setup(env); err != nil {
 				return err
 			}
+			env.Setenv("SOURCES_URL", sourcesURL)
 			return mirrors.seed(env)
 		},
 	})
+}
+
+// scriptSourcesETag labels the document startSourcesServer serves.
+const scriptSourcesETag = `"script-v1"`
+
+// startSourcesServer serves a sources document the way the sources service
+// does: a strong ETag, a cache header and a 304 for a matching If-None-Match.
+// It is what lets a script watch regtool fetch, cache and revalidate.
+func startSourcesServer(t *testing.T) string {
+	t.Helper()
+
+	body, err := json.Marshal(structs.RegistrySources{
+		structs.CN: {"npm": {"https://served.example/npm"}, "yarn": {"https://served.example/yarn"}},
+		structs.US: {"npm": {"https://served.example/npm-us"}, "yarn": {"https://served.example/yarn-us"}},
+	})
+	if err != nil {
+		t.Fatalf("failed to encode the served sources: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", scriptSourcesETag)
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		if r.Header.Get("If-None-Match") == scriptSourcesETag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
 }
 
 // mirrorServers is a fast mirror, a deliberately slow one and an address
@@ -142,8 +177,18 @@ func setup(env *testscript.Env) error {
 		return fmt.Errorf("failed to create the test Application Support directory: %w", err)
 	}
 
-	// Never hit the network: use the sources embedded in the binary.
+	// Never hit the network: use the sources embedded in the binary. A script
+	// that wants a fetch clears this and points REGTOOL_SOURCES_URL at the
+	// harness's own server.
 	env.Setenv(source.OfflineEnvVar, "1")
+
+	// The sources cache belongs inside the sandbox too, on every OS and
+	// whatever os.UserConfigDir would otherwise have resolved to.
+	configDir := filepath.Join(home, "regtool")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create the test config directory: %w", err)
+	}
+	env.Setenv(source.ConfigDirEnvVar, configDir)
 
 	// testscript puts the directory holding the regtool binary first on PATH.
 	// Keeping only that entry means a tool that happens to be installed on the

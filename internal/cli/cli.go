@@ -62,6 +62,7 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		newHistoryCommand(),
 		newUndoCommand(),
 		newRefreshCommand(),
+		newSourcesCommand(),
 		newVersionCommand(),
 	)
 	return root

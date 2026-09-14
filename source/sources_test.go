@@ -10,12 +10,20 @@ import (
 )
 
 // withRemote points the package-level sources URL at srv for the duration of
-// the test.
+// the test and gives the test a throwaway configuration directory, so a load
+// that succeeds caches into it instead of into the developer's own.
 func withRemote(t *testing.T, url string) {
 	t.Helper()
 	original := remoteSourcesURL
 	remoteSourcesURL = url
 	t.Cleanup(func() { remoteSourcesURL = original })
+
+	t.Setenv(ConfigDirEnvVar, t.TempDir())
+	// The environment of the machine running the tests must not decide where
+	// the sources come from.
+	t.Setenv(SourcesURLEnvVar, "")
+	t.Setenv(SourcesFileEnvVar, "")
+	t.Setenv(OfflineEnvVar, "")
 }
 
 const testSourcesJSON = `{
