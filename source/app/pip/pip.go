@@ -1,6 +1,7 @@
 package pip
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regtool/common/alias"
@@ -11,14 +12,22 @@ import (
 
 type PipRegistryManager struct{}
 
-func (n PipRegistryManager) GetCurrRegistry() (string, error) {
-	cmd := exec.Command("pip", "config", "get", "global.index-url")
-	output, err := cmd.Output()
+// runPip runs pip with the given arguments and returns its trimmed stdout.
+// On failure the error carries the command line and pip's stderr.
+func runPip(args ...string) (string, error) {
+	output, err := exec.Command("pip", args...).Output()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return "", err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("pip %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("pip %s failed: %w", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func (n PipRegistryManager) GetCurrRegistry() (string, error) {
+	return runPip("config", "get", "global.index-url")
 }
 
 func (n PipRegistryManager) SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error) {
@@ -30,18 +39,14 @@ func (n PipRegistryManager) SetRegistry(region structs.Region, sources *structs.
 		return "", fmt.Errorf("unsupported region: %s", region)
 	}
 
-	source, ok := regionSources["npm"]
-	if !ok || len(source) == 0 {
-		return "", fmt.Errorf("npm sources not found for region: %s", region)
+	pipSources, ok := regionSources["pip"]
+	if !ok || len(pipSources) == 0 {
+		return "", fmt.Errorf("pip sources not found for region: %s", region)
 	}
 
-	res := source[0]
+	res := pipSources[0]
 
-	fmt.Println(res)
-	c := exec.Command("pip", "config", "set", "global.index-url", res)
-	_, err := c.Output()
-	if err != nil {
-		fmt.Println("Error:", err)
+	if _, err := runPip("config", "set", "global.index-url", res); err != nil {
 		return "", err
 	}
 	return res, nil
