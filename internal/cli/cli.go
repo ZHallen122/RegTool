@@ -41,8 +41,12 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return tui.Run()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			svc, err := loadService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return tui.Run(svc)
 		},
 	}
 
