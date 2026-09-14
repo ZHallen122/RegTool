@@ -157,6 +157,84 @@ binary with `go:embed`. At runtime RegTool tries the remotely maintained copy
 first and falls back to the embedded one whenever the fetch fails, so it always
 works offline. Set `REGTOOL_OFFLINE=1` to skip the network fetch entirely.
 
+## Hub service (optional)
+
+`regtool-hub` is a small HTTP service that serves the same mirror list and
+checks every mirror in it on a schedule. It exists for two reasons: a mirror
+list that can be updated without cutting a CLI release, and a record of which
+mirrors were actually reachable from a given network over time. The CLI works
+perfectly well without one — it falls back to the list embedded in its binary —
+so running a hub is entirely optional.
+
+Bring up the hub, Prometheus and a provisioned Grafana:
+
+```sh
+make compose-up      # docker compose -f deploy/docker-compose.yml up -d --build
+make compose-down    # ...down -v, which also drops the check history
+```
+
+Then <http://localhost:8080/v1/sources> is the mirror list,
+<http://localhost:9090> is Prometheus and <http://localhost:3000> is Grafana,
+which opens straight onto a "RegTool Hub" dashboard with no login. The image is
+also published to `ghcr.io/zhallen122/regtool-hub` and a standalone binary ships
+in the `regtool-hub_<version>_<os>_<arch>` release archive.
+
+### Endpoints
+
+| Endpoint | What it returns |
+| --- | --- |
+| `GET /v1/sources` | The mirror list, in exactly the shape of [`source/sources.json`](./source/sources.json). Carries a strong `ETag` and `Cache-Control: public, max-age=300`, and answers `If-None-Match` with `304 Not Modified`. |
+| `GET /v1/health` | The latest check for every mirror: `{app, region, url, ok, latency_ms, status_code, error, checked_at}`. |
+| `GET /v1/health/history?app=&region=&limit=` | Past checks, newest first. `app` and `region` narrow the result, `limit` defaults to 100 and is clamped to 1000. |
+| `GET /healthz` | Liveness. Touches nothing, so a slow database does not get the process restarted. |
+| `GET /readyz` | Readiness. `503` until the first check has finished or taken 30 seconds. |
+| `GET /metrics` | Prometheus exposition. |
+
+### Metrics
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `regtool_hub_mirror_up` | gauge | `app`, `region`, `url` |
+| `regtool_hub_mirror_latency_seconds` | gauge | `app`, `region`, `url` |
+| `regtool_hub_checks_total` | counter | `result` (`ok` / `error`) |
+| `regtool_hub_check_duration_seconds` | histogram | — |
+| `regtool_hub_http_requests_total` | counter | `route`, `method`, `code` |
+| `regtool_hub_http_request_duration_seconds` | histogram | `route` |
+
+The Go runtime and process collectors are registered too, so `go_goroutines`,
+heap usage and file descriptors are on the same scrape.
+
+### Configuration
+
+Every flag has a `REGTOOL_HUB_*` environment variable behind it, so the
+container needs no entrypoint script.
+
+| Flag | Environment variable | Default |
+| --- | --- | --- |
+| `--addr` | `REGTOOL_HUB_ADDR` | `:8080` |
+| `--sources` | `REGTOOL_HUB_SOURCES` | the list embedded in the binary |
+| `--db` | `REGTOOL_HUB_DB` | `hub.db` (`/data/hub.db` in the image) |
+| `--check-interval` | `REGTOOL_HUB_CHECK_INTERVAL` | `5m` |
+| `--check-timeout` | `REGTOOL_HUB_CHECK_TIMEOUT` | `5s` |
+| `--retention` | `REGTOOL_HUB_RETENTION` | `7d` |
+| `--log-level` | `REGTOOL_HUB_LOG_LEVEL` | `info` |
+
+Results go into a SQLite file, which needs no server of its own; anything older
+than the retention window is swept after each check. Logs are `log/slog` JSON,
+and `SIGINT` or `SIGTERM` stops the checker and drains in-flight requests for up
+to ten seconds.
+
+### Pointing the CLI at a hub
+
+Set `REGTOOL_SOURCES_URL` to the hub's `/v1/sources` and the CLI fetches its
+mirror list from there instead of the default remote, falling back to the
+embedded copy if the hub is unreachable:
+
+```sh
+export REGTOOL_SOURCES_URL=http://localhost:8080/v1/sources
+regtool list npm
+```
+
 ## Demo
 
 <!-- TODO: asciinema/VHS demo -->
@@ -165,6 +243,9 @@ works offline. Set `REGTOOL_OFFLINE=1` to skip the network fetch entirely.
 
 ```sh
 make build      # build ./regtool with version, commit and date injected
+make hub        # build ./regtool-hub
+make hub-run    # run the hub locally with debug logging
+make compose-up # hub + Prometheus + Grafana (make compose-down to tear down)
 make test       # go test -race ./...
 make vet        # go vet ./...
 make lint       # golangci-lint v2.5.0
