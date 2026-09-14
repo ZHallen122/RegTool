@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -65,6 +66,9 @@ type Snapshot struct {
 // usable; construct one with [New] or [Default].
 type Store struct {
 	dir string
+
+	mu   sync.Mutex
+	last time.Time // timestamp of the most recent Save, for monotonic IDs
 }
 
 // New returns a Store rooted at dir. The directory is created on first write.
@@ -106,7 +110,7 @@ func (s *Store) Save(ctx context.Context, note string, paths []string) (*Snapsho
 		return nil, fmt.Errorf("history: create store dir %s: %w", s.dir, err)
 	}
 
-	now := time.Now().UTC()
+	now := s.nextTimestamp()
 	id, snapDir, err := s.claimID(now)
 	if err != nil {
 		return nil, err
@@ -196,6 +200,21 @@ func captureFile(src, dst string) (FileEntry, error) {
 	entry.Mode = info.Mode().Perm()
 	entry.Size = n
 	return entry, nil
+}
+
+// nextTimestamp returns a UTC time that is strictly later, at the ID layout's
+// millisecond resolution, than the one handed to the previous Save on this
+// Store. Two saves in the same millisecond would otherwise get IDs whose
+// order depends only on their random suffix.
+func (s *Store) nextTimestamp() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if !now.After(s.last) {
+		now = s.last.Add(time.Millisecond)
+	}
+	s.last = now
+	return now
 }
 
 // claimID reserves an unused snapshot directory and returns its ID and path.

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -46,6 +47,18 @@ func TestScripts(t *testing.T) {
 			env.Setenv("USERPROFILE", home)
 			// Never hit the network: use the sources embedded in the binary.
 			env.Setenv(source.OfflineEnvVar, "1")
+			// With -coverprofile every regtool subprocess writes coverage
+			// data into GOCOVERDIR. Scripts run in parallel, and on Windows
+			// two processes renaming the same meta-data file collide and
+			// print an error to stderr. Give each script its own directory
+			// there; the merged profile then only counts in-process tests.
+			if runtime.GOOS == "windows" && os.Getenv("GOCOVERDIR") != "" {
+				coverDir := filepath.Join(env.WorkDir, "coverdir")
+				if err := os.MkdirAll(coverDir, 0o755); err != nil {
+					return fmt.Errorf("failed to create the coverage directory: %w", err)
+				}
+				env.Setenv("GOCOVERDIR", coverDir)
+			}
 			return nil
 		},
 	})
