@@ -32,9 +32,17 @@ func (h HomebrewRegistryManager) GetCurrRegistry() (string, error) {
 
 // SetRegistry sets the Homebrew registry to the specified URLs from the given region
 func (h HomebrewRegistryManager) SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error) {
+	if sources == nil {
+		return "", fmt.Errorf("sources is nil")
+	}
 	regionSources, ok := (*sources)[region]
 	if !ok {
 		return "", fmt.Errorf("unsupported region: %s", region)
+	}
+
+	shellManager, err := shell.NewShellManager()
+	if err != nil {
+		return "", fmt.Errorf("unsupported shell: %w", err)
 	}
 
 	envVars := []string{
@@ -51,13 +59,7 @@ func (h HomebrewRegistryManager) SetRegistry(region structs.Region, sources *str
 			return "", fmt.Errorf("%s not found for region: %s", envVar, region)
 		}
 
-		shell, err2 := shell.NewShellManager()
-		if err2 != nil {
-			return "", fmt.Errorf("unsupport shell: %w", err2)
-		}
-
-		err := shell.SetEnv(envVar, urls[0])
-		if err != nil {
+		if err := shellManager.SetEnv(envVar, urls[0]); err != nil {
 			return "", fmt.Errorf("error setting %s: %w", envVar, err)
 		}
 	}

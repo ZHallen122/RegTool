@@ -1,6 +1,7 @@
 package yarn
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regtool/common/alias"
@@ -11,14 +12,22 @@ import (
 
 type YarnRegistryManager struct{}
 
-func (n YarnRegistryManager) GetCurrRegistry() (string, error) {
-	cmd := exec.Command("yarn", "config", "get", "registry")
-	output, err := cmd.Output()
+// runYarn runs yarn with the given arguments and returns its trimmed stdout.
+// On failure the error carries the command line and yarn's stderr.
+func runYarn(args ...string) (string, error) {
+	output, err := exec.Command("yarn", args...).Output()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return "", err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("yarn %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("yarn %s failed: %w", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func (n YarnRegistryManager) GetCurrRegistry() (string, error) {
+	return runYarn("config", "get", "registry")
 }
 
 func (n YarnRegistryManager) SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error) {
@@ -30,17 +39,19 @@ func (n YarnRegistryManager) SetRegistry(region structs.Region, sources *structs
 		return "", fmt.Errorf("unsupported region: %s", region)
 	}
 
-	source, ok := regionSources["npm"]
-	if !ok || len(source) == 0 {
-		return "", fmt.Errorf("npm sources not found for region: %s", region)
+	// yarn shares the npm registry protocol, so fall back to the npm entry when
+	// the region has no yarn-specific source.
+	yarnSources, ok := regionSources["yarn"]
+	if !ok || len(yarnSources) == 0 {
+		yarnSources, ok = regionSources["npm"]
+		if !ok || len(yarnSources) == 0 {
+			return "", fmt.Errorf("yarn sources not found for region: %s", region)
+		}
 	}
 
-	res := source[0]
+	res := yarnSources[0]
 
-	c := exec.Command("yarn", "config", "set", "registry", res)
-	_, err := c.Output()
-	if err != nil {
-		fmt.Println("Error:", err)
+	if _, err := runYarn("config", "set", "registry", res); err != nil {
 		return "", err
 	}
 	return res, nil

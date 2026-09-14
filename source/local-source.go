@@ -1,15 +1,17 @@
 package source
 
 import (
+	"context"
 	"fmt"
 	"regtool/source/localdata"
 )
 
 // Convert map[Name]Source
-func convertLocalSources(sources map[string]string) map[string]Source {
+func convertLocalSources(ctx context.Context, sources map[string]string) (map[string]Source, error) {
 	if SOURCES == nil {
-		SOURCES, _ = GetRemoteSourcesMap()
-		//TODO: handle if networking error
+		if _, err := GetRemoteSourcesMap(ctx); err != nil {
+			return nil, fmt.Errorf("failed to load registry sources: %w", err)
+		}
 	}
 
 	result := make(map[string]Source)
@@ -28,13 +30,13 @@ func convertLocalSources(sources map[string]string) map[string]Source {
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func GetLocalSourcesMap() (map[string]Source, error) {
 	sources, err := localdata.ReadBackupFile()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read backup file: %v", err)
+		return nil, fmt.Errorf("failed to read backup file: %w", err)
 	}
-	return convertLocalSources(sources), nil
+	return convertLocalSources(context.Background(), sources)
 }

@@ -1,8 +1,9 @@
 package source
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"regtool/console"
 	"regtool/source/localdata"
 	"regtool/source/structs"
 )
@@ -14,12 +15,22 @@ func Update(updateChan chan string) error {
 
 	managers := GetAllRegisteredApp()
 	res := make(map[string]string)
+	var errs []error
 	for name, manager := range managers {
-		res[name], _ = manager.GetCurrRegistry()
+		current, err := manager.GetCurrRegistry()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to read current %s registry: %w", name, err))
+			continue
+		}
+		res[name] = current
 		updateChan <- name + " is updated"
 	}
-	localdata.SaveToBackup(res)
-	return nil
+
+	if err := localdata.SaveToBackup(res); err != nil {
+		errs = append(errs, fmt.Errorf("failed to save registry backup: %w", err))
+	}
+
+	return errors.Join(errs...)
 }
 
 func ChangeAllRegistry(region string, updateChan chan string) error {
@@ -28,37 +39,41 @@ func ChangeAllRegistry(region string, updateChan chan string) error {
 		return fmt.Errorf("unknown region: %s", region)
 	}
 
-	rs, err := GetRemoteRegistrySources()
+	ctx := context.Background()
+
+	rs, err := LoadRegistrySources(ctx)
 	if err != nil {
-		console.Error("Failed to fetch remote sources:", err.Error())
-		return err
+		return fmt.Errorf("failed to load registry sources: %w", err)
 	}
 
-	localAppsMap, err2 := localdata.ReadBackupFile()
-	if err2 != nil {
-		console.Error("Failed to read backup file:", err2.Error())
-		return err2
+	localAppsMap, err := localdata.ReadBackupFile()
+	if err != nil {
+		return fmt.Errorf("failed to read backup file: %w", err)
 	}
 
 	appManagers := GetAllRegisteredApp()
 	//TODO do backup if changed
 	//lets do a git log-like backup for chang every time
-	for name, _ := range localAppsMap {
-		if manager, ok := appManagers[name]; ok {
-			manager.SetRegistry(regionValue, rs)
-
-		} else {
-			console.Error("Manager not found for:", name)
+	var errs []error
+	for name := range localAppsMap {
+		manager, ok := appManagers[name]
+		if !ok {
+			errs = append(errs, fmt.Errorf("no registry manager found for %q", name))
+			continue
 		}
 
+		if _, err := manager.SetRegistry(regionValue, rs); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set %s registry to region %s: %w", name, region, err))
+		}
 	}
-	return nil
+
+	return errors.Join(errs...)
 }
 
 func ListAllRegistry(ch chan<- string) {
-	rs, err := GetRemoteRegistrySources()
+	rs, err := LoadRegistrySources(context.Background())
 	if err != nil {
-		ch <- fmt.Sprintf("ERROR: Failed to get remote registry sources: %s", err.Error())
+		ch <- fmt.Sprintf("ERROR: Failed to get registry sources: %s", err.Error())
 		return
 	}
 
@@ -84,9 +99,9 @@ func ListAllRegistry(ch chan<- string) {
 	}
 }
 func ListRegistryByAppName(appName string, ch chan<- string) {
-	rs, err := GetRemoteRegistrySources()
+	rs, err := LoadRegistrySources(context.Background())
 	if err != nil {
-		ch <- fmt.Sprintf("ERROR: Failed to get remote registry sources: %s", err.Error())
+		ch <- fmt.Sprintf("ERROR: Failed to get registry sources: %s", err.Error())
 		close(ch)
 		return
 	}

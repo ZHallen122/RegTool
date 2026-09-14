@@ -1,9 +1,11 @@
 package gem
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regtool/common/alias"
+	"regtool/console"
 	"regtool/source"
 	"regtool/source/structs"
 	"strings"
@@ -11,22 +13,29 @@ import (
 
 type GemRegistryManager struct{}
 
-func (g GemRegistryManager) GetCurrRegistry() (string, error) {
-	cmd := exec.Command("gem", "sources", "-l")
-	output, err := cmd.Output()
+// runGem runs gem with the given arguments and returns its stdout.
+// On failure the error carries the command line and gem's stderr.
+func runGem(args ...string) (string, error) {
+	output, err := exec.Command("gem", args...).Output()
 	if err != nil {
-		fmt.Println("Error:", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("gem %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("gem %s failed: %w", strings.Join(args, " "), err)
+	}
+	return string(output), nil
+}
+
+func (g GemRegistryManager) GetCurrRegistry() (string, error) {
+	sources, err := g.getCurrentSources()
+	if err != nil {
 		return "", err
 	}
-
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "https://") {
-			return strings.TrimSpace(line), nil
-		}
+	if len(sources) == 0 {
+		return "", fmt.Errorf("no valid source found")
 	}
-
-	return "", fmt.Errorf("no valid source found")
+	return sources[0], nil
 }
 
 func (g GemRegistryManager) SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error) {
@@ -37,34 +46,29 @@ func (g GemRegistryManager) SetRegistry(region structs.Region, sources *structs.
 	if !ok {
 		return "", fmt.Errorf("unsupported region: %s", region)
 	}
-	source, ok := regionSources["gem"]
-	if !ok || len(source) == 0 {
+	gemSources, ok := regionSources["gem"]
+	if !ok || len(gemSources) == 0 {
 		return "", fmt.Errorf("gem sources not found for region: %s", region)
 	}
-	newSource := source[0]
+	newSource := gemSources[0]
 
 	// Get current sources
 	currentSources, err := g.getCurrentSources()
 	if err != nil {
-		return "", fmt.Errorf("error getting current sources: %v", err)
+		return "", fmt.Errorf("error getting current sources: %w", err)
 	}
 
-	// Remove all current sources
+	// Remove all current sources. A source that refuses to be removed is not
+	// fatal: the new source is still added below.
 	for _, src := range currentSources {
-		removeCmd := exec.Command("gem", "sources", "--remove", src)
-		_, err := removeCmd.Output()
-		if err != nil {
-			fmt.Printf("Error removing source %s: %v\n", src, err)
-			// Continue with other sources even if one fails
+		if _, err := runGem("sources", "--remove", src); err != nil {
+			console.Warning("Could not remove gem source", src+":", err.Error())
 		}
 	}
 
 	// Add the new source
-	addCmd := exec.Command("gem", "sources", "--add", newSource)
-	_, err = addCmd.Output()
-	if err != nil {
-		fmt.Println("Error adding new source:", err)
-		return "", err
+	if _, err := runGem("sources", "--add", newSource); err != nil {
+		return "", fmt.Errorf("failed to add gem source %s: %w", newSource, err)
 	}
 
 	return newSource, nil
@@ -76,15 +80,13 @@ func (g GemRegistryManager) IsExists() bool {
 }
 
 func (g GemRegistryManager) getCurrentSources() ([]string, error) {
-	cmd := exec.Command("gem", "sources", "-l")
-	output, err := cmd.Output()
+	output, err := runGem("sources", "-l")
 	if err != nil {
-		return nil, fmt.Errorf("error executing gem sources -l: %v", err)
+		return nil, err
 	}
 
 	var sources []string
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "https://") {
 			sources = append(sources, strings.TrimSpace(line))
 		}

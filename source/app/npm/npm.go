@@ -2,6 +2,7 @@
 package npm
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regtool/common/alias"
@@ -12,14 +13,22 @@ import (
 
 type NpmRegistryManager struct{}
 
-func (n NpmRegistryManager) GetCurrRegistry() (string, error) {
-	cmd := exec.Command("npm", "config", "get", "registry")
-	output, err := cmd.Output()
+// runNpm runs npm with the given arguments and returns its trimmed stdout.
+// On failure the error carries the command line and npm's stderr.
+func runNpm(args ...string) (string, error) {
+	output, err := exec.Command("npm", args...).Output()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return "", err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("npm %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("npm %s failed: %w", strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func (n NpmRegistryManager) GetCurrRegistry() (string, error) {
+	return runNpm("config", "get", "registry")
 }
 
 func (n NpmRegistryManager) SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error) {
@@ -38,10 +47,7 @@ func (n NpmRegistryManager) SetRegistry(region structs.Region, sources *structs.
 
 	res := npmSources[0]
 
-	c := exec.Command("npm", "config", "set", "registry", res)
-	_, err := c.Output()
-	if err != nil {
-		fmt.Println("Error:", err)
+	if _, err := runNpm("config", "set", "registry", res); err != nil {
 		return "", err
 	}
 	return res, nil
