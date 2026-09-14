@@ -557,8 +557,8 @@ func TestDescribeWithNoCacheReportsNothingCached(t *testing.T) {
 	if !status.Offline {
 		t.Error("expected offline to be true")
 	}
-	if status.Regions != 3 || status.Apps != 11 {
-		t.Errorf("expected the embedded 3 regions and 11 apps, got %d and %d", status.Regions, status.Apps)
+	if status.Regions != 3 || status.Apps != 13 {
+		t.Errorf("expected the embedded 3 regions and 13 apps, got %d and %d", status.Regions, status.Apps)
 	}
 }
 

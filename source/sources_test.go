@@ -140,6 +140,8 @@ func assertEmbeddedShape(t *testing.T, sources *structs.RegistrySources) {
 		"gem",
 		"go",
 		"cargo",
+		"helm",
+		"docker",
 		"homebrew_api_domain",
 		"homebrew_bottle_domain",
 		"homebrew_brew_git_remote",

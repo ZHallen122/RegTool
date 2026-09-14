@@ -73,7 +73,7 @@ cache    /home/you/.config/regtool/sources.cache.json
 etag     "6f1a9c3e"
 fetched  2026-09-14T08:31:04+02:00
 regions  3
-apps     11
+apps     13
 ```
 
 `origin` is one of `file`, `remote`, `cache` or `embedded`: which step of the
@@ -95,7 +95,7 @@ etag     "8b27d104"
 fetched  2026-09-14T09:02:55+02:00
 changed  yes
 regions  3
-apps     11
+apps     13
 ```
 
 Unlike every other command it does not fall back: a fetch that fails is an
