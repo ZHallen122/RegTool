@@ -21,6 +21,11 @@ const (
 	gemUS = "https://rubygems.org/"
 	gemCN = "https://mirrors.tuna.tsinghua.edu.cn/rubygems/"
 	goCN  = "https://goproxy.cn"
+
+	helmUS   = "https://charts.helm.sh/stable"
+	helmCN   = "https://mirror.azure.cn/kubernetes/charts"
+	dockerUS = "https://registry-1.docker.io"
+	dockerCN = "https://docker.m.daocloud.io"
 )
 
 // testSources mirrors the shape of the bundled sources.json, with just enough
@@ -34,6 +39,8 @@ func testSources() *structs.RegistrySources {
 			"gem":                    {gemUS},
 			"go":                     {"https://proxy.golang.org"},
 			"cargo":                  {"sparse+https://index.crates.io/"},
+			"helm":                   {helmUS},
+			"docker":                 {dockerUS},
 			"homebrew_bottle_domain": {"https://ghcr.io/v2/homebrew/core"},
 		},
 		structs.CN: {
@@ -42,6 +49,8 @@ func testSources() *structs.RegistrySources {
 			"gem":                    {gemCN},
 			"go":                     {goCN},
 			"cargo":                  {"sparse+https://rsproxy.cn/index/"},
+			"helm":                   {helmCN},
+			"docker":                 {dockerCN},
 			"homebrew_bottle_domain": {"https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"},
 		},
 		structs.EU: {
@@ -63,9 +72,18 @@ func testEnv(t *testing.T) (backend.Env, string) {
 			t.Fatalf("failed to create %s: %v", dir, err)
 		}
 	}
-	// A nil Getenv reads every variable as empty, which keeps the backends off
-	// the ambient NPM_CONFIG_USERCONFIG, GOENV, CARGO_HOME and friends.
-	return backend.Env{Home: home, ConfigDir: config}, root
+	// Every variable but one reads as empty, which keeps the backends off the
+	// ambient NPM_CONFIG_USERCONFIG, GOENV, CARGO_HOME and friends. The
+	// exception is docker, whose daemon.json lives under /etc on Linux: a test
+	// must neither read the machine's own file nor try to write it.
+	daemonJSON := filepath.Join(root, "docker", "daemon.json")
+	getenv := func(key string) string {
+		if key == backend.DockerDaemonJSONEnvVar {
+			return daemonJSON
+		}
+		return ""
+	}
+	return backend.Env{Home: home, ConfigDir: config, Getenv: getenv}, root
 }
 
 // newTestService builds a Service whose backends and snapshots all live under a
@@ -349,6 +367,126 @@ func TestUseAcceptsAnAlias(t *testing.T) {
 	}
 }
 
+// configPath returns the file one backend of env edits.
+func configPath(t *testing.T, env backend.Env, app string) string {
+	t.Helper()
+
+	for _, b := range backend.All(env) {
+		if b.Name() == app {
+			return b.ConfigPath()
+		}
+	}
+	t.Fatalf("no backend named %q", app)
+	return ""
+}
+
+// helmAndDockerService builds a Service together with the two configuration
+// files the new backends edit, seeded with the us mirrors.
+func helmAndDockerService(t *testing.T) (*Service, string, string) {
+	t.Helper()
+
+	env, root := testEnv(t)
+	svc := New(testSources(), backend.All(env), history.New(filepath.Join(root, "history")))
+
+	helmConfig := configPath(t, env, "helm")
+	writeFile(t, helmConfig, "apiVersion: v1\n"+
+		"repositories:\n"+
+		"  - name: bitnami\n"+
+		"    url: https://charts.bitnami.com/bitnami\n"+
+		"  - name: stable\n"+
+		"    url: "+helmUS+"\n")
+
+	dockerConfig := configPath(t, env, "docker")
+	writeFile(t, dockerConfig, "{\n  \"log-driver\": \"json-file\",\n  \"registry-mirrors\": [\"https://old.example\"]\n}\n")
+
+	return svc, helmConfig, dockerConfig
+}
+
+func TestUsePointsHelmAndDockerAtTheRegionsMirrors(t *testing.T) {
+	svc, helmConfig, dockerConfig := helmAndDockerService(t)
+
+	result, err := svc.Use(context.Background(), "cn", []string{"helm", "docker"}, false)
+	if err != nil {
+		t.Fatalf("Use() returned an unexpected error: %v", err)
+	}
+
+	if change := findChange(t, result, "helm"); change.From != helmUS || change.To != helmCN {
+		t.Errorf("Use() reported %q -> %q for helm, want %q -> %q", change.From, change.To, helmUS, helmCN)
+	}
+	if change := findChange(t, result, "docker"); change.From != "https://old.example" || change.To != dockerCN {
+		t.Errorf("Use() reported %q -> %q for docker, want %q -> %q", change.From, change.To, "https://old.example", dockerCN)
+	}
+
+	got := readFile(t, helmConfig)
+	if !strings.Contains(got, helmCN) || !strings.Contains(got, "bitnami") {
+		t.Errorf("repositories.yaml is %q, want the cn mirror and the other repository", got)
+	}
+	got = readFile(t, dockerConfig)
+	if !strings.Contains(got, dockerCN) || !strings.Contains(got, "log-driver") {
+		t.Errorf("daemon.json is %q, want the cn mirror and the other key", got)
+	}
+
+	// status recognises both of them as the cn region now.
+	statuses, err := svc.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status() returned an unexpected error: %v", err)
+	}
+	regions := make(map[string]string, len(statuses))
+	for _, status := range statuses {
+		regions[status.App] = status.Region
+	}
+	if regions["helm"] != "cn" {
+		t.Errorf("Status() put helm in region %q, want cn", regions["helm"])
+	}
+	if regions["docker"] != "cn" {
+		t.Errorf("Status() put docker in region %q, want cn", regions["docker"])
+	}
+}
+
+// The us docker mirror is Docker Hub itself, which the backend expresses by
+// dropping registry-mirrors rather than by naming the default registry.
+func TestUsePointsDockerBackAtHub(t *testing.T) {
+	svc, _, dockerConfig := helmAndDockerService(t)
+
+	if _, err := svc.Use(context.Background(), "us", []string{"docker"}, false); err != nil {
+		t.Fatalf("Use() returned an unexpected error: %v", err)
+	}
+
+	got := readFile(t, dockerConfig)
+	if strings.Contains(got, "registry-mirrors") {
+		t.Errorf("daemon.json is %q, want the mirrors gone", got)
+	}
+	if !strings.Contains(got, "log-driver") {
+		t.Errorf("daemon.json is %q, want the other key kept", got)
+	}
+}
+
+func TestUseAcceptsTheHelmAndDockerAliases(t *testing.T) {
+	tests := []struct {
+		alias string
+		app   string
+		want  string
+	}{
+		{alias: "chart", app: "helm", want: helmCN},
+		{alias: "charts", app: "helm", want: helmCN},
+		{alias: "dockerd", app: "docker", want: dockerCN},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.alias, func(t *testing.T) {
+			svc, _, _ := helmAndDockerService(t)
+
+			result, err := svc.Use(context.Background(), "cn", []string{tt.alias}, true)
+			if err != nil {
+				t.Fatalf("Use() returned an unexpected error: %v", err)
+			}
+			if change := findChange(t, result, tt.app); change.To != tt.want {
+				t.Errorf("Use(%q) targeted %q, want %q", tt.alias, change.To, tt.want)
+			}
+		})
+	}
+}
+
 func TestUseSkipsAppsThatAreNotInstalled(t *testing.T) {
 	svc, home := newTestService(t)
 	writeFile(t, filepath.Join(home, ".npmrc"), "registry="+npmUS+"\n")
@@ -490,7 +628,19 @@ func TestList(t *testing.T) {
 			name:      "no app lists every mirror",
 			app:       "",
 			wantFirst: RegistryEntry{App: "cargo", Region: "cn", URL: "sparse+https://rsproxy.cn/index/"},
-			wantCount: 13,
+			wantCount: 17,
+		},
+		{
+			name:      "helm is listed under its own name",
+			app:       "helm",
+			wantFirst: RegistryEntry{App: "helm", Region: "cn", URL: helmCN},
+			wantCount: 2,
+		},
+		{
+			name:      "docker is listed under its own name",
+			app:       "dockerd",
+			wantFirst: RegistryEntry{App: "docker", Region: "cn", URL: dockerCN},
+			wantCount: 2,
 		},
 		{
 			name:      "go is a first class backend now",
@@ -579,7 +729,7 @@ func TestAppsListsEveryBackend(t *testing.T) {
 	env, root := testEnv(t)
 	svc := New(testSources(), backend.All(env), history.New(filepath.Join(root, "history")), WithHomebrew())
 
-	want := []string{"npm", "yarn", "yarn-berry", "pip", "gem", "go", "cargo", "homebrew"}
+	want := []string{"npm", "yarn", "yarn-berry", "pip", "gem", "go", "cargo", "helm", "docker", "homebrew"}
 	got := svc.Apps()
 	if len(got) != len(want) {
 		t.Fatalf("Apps() = %v, want %v", got, want)

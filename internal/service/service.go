@@ -43,6 +43,9 @@ var appAliases = map[string]string{
 	"golang":    "go",
 	"rubygems":  "gem",
 	"pip3":      "pip",
+	"chart":     "helm",
+	"charts":    "helm",
+	"dockerd":   "docker",
 }
 
 // canonicalApp resolves a user supplied app name to a backend name.
@@ -56,7 +59,8 @@ func canonicalApp(app string) string {
 
 // sourceKey maps a backend name onto the key its mirrors live under in the
 // sources file. Both yarn backends share yarn's mirrors, and homebrew is
-// represented by its bottle domain because it has no single registry.
+// represented by its bottle domain because it has no single registry. Every
+// other backend, helm and docker included, uses its own name as the key.
 func sourceKey(name string) string {
 	switch name {
 	case "yarn-berry":

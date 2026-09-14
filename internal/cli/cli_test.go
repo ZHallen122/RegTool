@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ZHallen122/RegTool/internal/backend"
 	"github.com/ZHallen122/RegTool/internal/cli"
 	"github.com/ZHallen122/RegTool/source"
 	"github.com/ZHallen122/RegTool/source/structs"
@@ -171,6 +172,11 @@ func setup(env *testscript.Env) error {
 		}
 		env.Setenv(name, dir)
 	}
+	// The docker backend edits /etc/docker/daemon.json on Linux, which the
+	// machine running the tests may well have and which a test must neither
+	// read nor write. Point it inside the sandbox on every OS.
+	env.Setenv(backend.DockerDaemonJSONEnvVar, filepath.Join(home, ".docker", "daemon.json"))
+
 	// macOS needs the Application Support directory as well, because that is
 	// where os.UserConfigDir points there.
 	if err := os.MkdirAll(filepath.Join(home, "Library", "Application Support"), 0o755); err != nil {
