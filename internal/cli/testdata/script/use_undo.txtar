@@ -1,0 +1,33 @@
+# A real run snapshots first, then rewrites the file.
+cp npmrc $HOME/.npmrc
+
+exec regtool use cn npm
+! stderr .
+stdout '^npm\s+https://registry\.npmjs\.org\s+https://registry\.npmmirror\.com\s+changed$'
+stdout '^snapshot \S+: run .regtool undo. to put it back$'
+grep '^registry=https://registry\.npmmirror\.com$' $HOME/.npmrc
+
+# status now matches the change against the cn region.
+exec regtool status
+! stderr .
+stdout '^npm\s+cn\s+https://registry\.npmmirror\.com$'
+
+# Asking for the same mirror again changes nothing and takes no snapshot.
+exec regtool use cn npm
+stdout '^npm\s+.*already set$'
+! stdout 'snapshot'
+
+# undo puts the file back byte for byte.
+exec regtool undo
+! stderr .
+stdout '^restored snapshot \S+ \(use cn\)$'
+stdout 'restored .*\.npmrc$'
+cmp $HOME/.npmrc npmrc
+
+exec regtool status
+stdout '^npm\s+us\s+https://registry\.npmjs\.org$'
+
+-- npmrc --
+# hand written, keep me
+registry=https://registry.npmjs.org
+strict-ssl=true

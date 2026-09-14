@@ -1,6 +1,11 @@
-# refresh records the current registries under the config directory.
+# refresh records the registry of every installed app under the config dir.
+cp npmrc $HOME/.npmrc
+
 exec regtool refresh
+! stderr .
 stdout '^recorded the current registries$'
 exists $HOME/.config/regtool/backup.json
-grep '"npm":"https://registry.npmjs.org/"' $HOME/.config/regtool/backup.json
-grep '"pip":"https://pypi.example.com/simple"' $HOME/.config/regtool/backup.json
+grep '"npm":"https://registry.npmjs.org"' $HOME/.config/regtool/backup.json
+
+-- npmrc --
+registry=https://registry.npmjs.org

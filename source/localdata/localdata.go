@@ -31,7 +31,6 @@ func ensureDirectory(path string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create directory: %v", err)
 		}
-		fmt.Println("Directory created:", path)
 	} else if err != nil {
 		return fmt.Errorf("failed to check directory: %v", err)
 	}

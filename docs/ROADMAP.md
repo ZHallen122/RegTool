@@ -39,8 +39,8 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 - [x] 用 `curl` 而不是 `net/http`，没有 context，没有超时。
 - [x] 大量错误被 `_` 吞掉，`UpdateRegistry`、`ChangeAllRegistry` 失败时静默。
 - [x] `cmd/run.go` 的 `regions` 里有 "jp"，但 `structs.StringToRegion` 不认，返回空字符串。
-- [ ] 全局可变状态（`SOURCES`、`registryManagers`、`commandRegistry`）加 `init()` 注册，无法单测。
-- [ ] 只支持 macOS / Linux：依赖 `$SHELL`、`.bashrc`、Makefile 里 `sudo install`。
+- [x] 全局可变状态（`SOURCES`、`registryManagers`、`commandRegistry`）加 `init()` 注册，无法单测。
+- [x] 只支持 macOS / Linux：依赖 `$SHELL`、`.bashrc`、Makefile 里 `sudo install`。（只剩 homebrew 一家还要 `$SHELL`）
 - [x] go.mod 所有依赖都标 `// indirect`，还 require 了不该出现在运行时依赖里的 `cobra-cli`。
 - [x] clone 后直接 `go build` 失败，必须先跑代码生成器。
 - [x] 源列表硬编码 gitee 地址，没有本地缓存和离线回退。
@@ -79,15 +79,15 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：脚本可用，能写端到端测试。
 
-- [ ] 引入 cobra 子命令：
+- [x] 引入 cobra 子命令：
   - `regtool use <region> [app...]`
   - `regtool status`
   - `regtool list [app]`
-  - `regtool undo`
+  - `regtool undo [snapshot-id]` / `regtool history`
   - 无参数进 TUI。
-- [ ] TUI 的 model 不再直接调 `source` 包，而是调同一套 service 层，CLI 和 TUI 共用。
-- [ ] 用 `testscript` 写 CLI 端到端测试。
-- [ ] `--json` 输出，方便脚本消费。
+- [x] TUI 的 model 不再直接调 `source` 包，而是调同一套 service 层，CLI 和 TUI 共用。
+- [x] 用 `testscript` 写 CLI 端到端测试。
+- [x] `--json` 输出，方便脚本消费。
 
 验收：`regtool use cn npm --dry-run` 能打印将要做的改动；testscript 覆盖主要子命令。
 
@@ -95,8 +95,8 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：不再 shell out，直接读写配置文件，做成事务式变更。
 
-- [ ] 定义 `Backend` 接口：`Name()`、`Detect()`、`Current()`、`Plan(target)`、`Apply(plan)`。
-- [ ] 每个后端直接读写自己的配置文件，不调外部命令：
+- [x] 定义 `Backend` 接口：`Name()`、`Detect()`、`Current()`、`Plan(target)`、`Apply(plan)`。
+- [x] 每个后端直接读写自己的配置文件，不调外部命令：
   - npm：`~/.npmrc`
   - yarn：`~/.yarnrc.yml`（yarn berry）和 `~/.yarnrc`（yarn 1）
   - pip：`pip.conf` / `pip.ini`
@@ -104,11 +104,11 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
   - go：`GOPROXY`（`go env -w` 或 `~/.config/go/env`）
   - cargo：`~/.cargo/config.toml`
   - homebrew：保留调命令，因为它本身就是 git remote 操作
-- [ ] 变更前快照到 `~/.config/regtool/history/<timestamp>/`，可用 `regtool undo` 回滚到任意版本。
-- [ ] 写文件走临时文件 + rename 的原子写。
-- [ ] `--dry-run` 输出 unified diff。
-- [ ] 所有路径用 `os.UserConfigDir` 和 `filepath`，Windows 可用。
-- [ ] 每个后端用 fake 文件系统做表驱动测试。
+- [x] 变更前快照到 `~/.config/regtool/history/<timestamp>/`，可用 `regtool undo` 回滚到任意版本。
+- [x] 写文件走临时文件 + rename 的原子写。
+- [x] `--dry-run` 输出 unified diff。
+- [x] 所有路径用 `os.UserConfigDir` 和 `filepath`，Windows 可用。
+- [x] 每个后端用 fake 文件系统做表驱动测试。（用的是临时 home 目录 + 注入的 `backend.Env`，不是内存 fs；效果一样：测试不碰真实 home，也不依赖任何外部命令）
 
 验收：在一台没有 npm 的机器上也能对 `.npmrc` 做 plan / apply / undo，并且测试不依赖任何外部命令。
 
@@ -171,3 +171,4 @@ Step 5 保证项目能被安装和使用，star 和 issue 才会来。Step 6 是
 | --- | --- |
 | 2026-09-13 | 完成现状分析，写下本路线图 |
 | 2026-09-14 | Step 1 完成（PR #2 #3 #4 #5）：可直接 build，net/http + 内嵌默认源，错误上抛，lint + 三平台 CI，模块路径改为 github.com/ZHallen122/RegTool。全局可变状态和 Windows 支持留到 Step 2 / 3 处理 |
+| 2026-09-14 | Step 2 / Step 3 完成：service 层改到 `internal/backend` + `internal/history` 之上，`use` 变成「先快照、后原子写」的事务，新增 `regtool undo` / `regtool history` 和 `--dry-run` 的 unified diff；CLI 和 TUI 共用同一个 service；新增 go / cargo 两个后端的镜像源；删掉 `source/app/**`、`common/alias` 和 `source` 里的全局可变状态。homebrew 仍然是 exec 调 `brew`，因为它靠环境变量配置，没有自己的配置文件 |

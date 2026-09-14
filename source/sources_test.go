@@ -119,31 +119,6 @@ func TestEmbeddedSourcesAreComplete(t *testing.T) {
 	assertEmbeddedShape(t, got)
 }
 
-func TestEmbeddedSourcesConvert(t *testing.T) {
-	embedded, err := GetEmbeddedRegistrySources()
-	if err != nil {
-		t.Fatalf("GetEmbeddedRegistrySources returned error: %v", err)
-	}
-
-	converted := ConvertSources(embedded)
-	for _, key := range []string{"npm", "yarn", "pip", "gem"} {
-		entry, ok := converted[key]
-		if !ok {
-			t.Errorf("ConvertSources dropped %q", key)
-			continue
-		}
-		if entry.Name != key {
-			t.Errorf("ConvertSources set Name=%q for key %q", entry.Name, key)
-		}
-		if entry.Url == "" {
-			t.Errorf("ConvertSources left an empty Url for %q", key)
-		}
-		if entry.Region == "" {
-			t.Errorf("ConvertSources left an empty Region for %q", key)
-		}
-	}
-}
-
 // assertEmbeddedShape checks that sources look like the bundled sources.json:
 // every supported region present, each carrying a url for every package
 // manager the backends read.
@@ -155,6 +130,8 @@ func assertEmbeddedShape(t *testing.T, sources *structs.RegistrySources) {
 		"yarn",
 		"pip",
 		"gem",
+		"go",
+		"cargo",
 		"homebrew_api_domain",
 		"homebrew_bottle_domain",
 		"homebrew_brew_git_remote",

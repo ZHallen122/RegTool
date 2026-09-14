@@ -7,10 +7,10 @@
 **Features:**
 
 - **CLI and TUI**: Scriptable subcommands for automation, an interactive interface when you just want to click around.
-- **Multi-Registry Management**: Easily switch between different registries for each supported software.
-- **Secure Token Storage**: Securely manage and store access tokens for private registries.
-- **Centralized Configuration**: Simplify and centralize the configuration of all supported package managers and registries.
-- **User-Friendly Interface**: Navigate through settings and configurations with an intuitive interface.
+- **No external commands**: RegTool edits `~/.npmrc`, `~/.yarnrc.yml`, `pip.conf`, `~/.gemrc`, the Go env file and `~/.cargo/config.toml` itself, so it works on a machine where those tools are not installed. Homebrew is the exception: it is configured through environment variables, so it still runs `brew`.
+- **Transactional changes**: every file is snapshotted before it is touched and written atomically, so `regtool undo` puts any change back.
+- **Dry runs**: `--dry-run` prints the unified diff of every file that would change, without writing anything.
+- **Cross platform**: Linux, macOS and Windows; every path goes through `os.UserConfigDir` and `path/filepath`.
 
 ### Usage
 
@@ -25,12 +25,17 @@ regtool status
 regtool list
 regtool list npm
 
-# preview a change without touching any configuration
+# preview a change: prints the unified diff of every file it would rewrite
 regtool use cn npm --dry-run
 
 # point npm and pip at the China mirrors; with no app names, every installed app
 regtool use cn npm pip
 regtool use us
+
+# list the snapshots taken before each change, and roll one back
+regtool history
+regtool undo
+regtool undo 20260914T041530.123Z-3f9a1c
 
 # record the current registries so a later change can be compared against them
 regtool refresh
@@ -39,9 +44,14 @@ regtool refresh
 regtool version
 ```
 
-`status`, `list` and `use` accept `--json`, which writes the result to stdout as
-JSON so it can be piped into `jq` or another tool. Errors go to stderr and the
+`status`, `list`, `use` and `history` accept `--json`, which writes the result to
+stdout so it can be piped into `jq` or another tool. Errors go to stderr and the
 process exits with status 1.
+
+A real `use` run copies every file it is about to change into
+`<user config dir>/regtool/history/<snapshot id>/` first and prints the snapshot
+id. `regtool undo` restores the newest snapshot, or the one you name; the
+restore is itself snapshotted, so an undo can be undone.
 
 By supporting a wide range of software and registries, RegTool aims to streamline your development process and provide a seamless experience across different ecosystems.
 
@@ -52,15 +62,15 @@ By supporting a wide range of software and registries, RegTool aims to streamlin
 | npm        | Manage Node.js packages and switch between public and private npm registries seamlessly. | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | Yarn       | Configure Yarn package manager registries, supporting both public and private packages.  | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | Docker     | Handle Docker image registries, including Docker Hub and private Docker registries.      | ![red](https://img.shields.io/badge/status-unavailable-red)         |
-| Homebrew   | Manage Homebrew taps and repositories for macOS and Linux package installations.         | ![green](https://img.shields.io/badge/status-available-brightgreen) |
+| Homebrew   | Manage Homebrew taps and repositories for macOS and Linux package installations. Still driven by running `brew`, because homebrew is configured through environment variables. | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | pip        | Configure and manage Python package indexes, including PyPI and private repositories.    | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | RubyGems   | Manage Ruby gems and configure sources for gem installations.                            | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | Maven      | Handle Java dependencies and configure Maven repositories.                               | ![red](https://img.shields.io/badge/status-unavailable-red)         |
 | Gradle     | Manage Gradle repositories for Java projects.                                            | ![red](https://img.shields.io/badge/status-unavailable-red)         |
 | Composer   | Handle PHP package management with Composer and configure repositories.                  | ![red](https://img.shields.io/badge/status-unavailable-red)         |
 | NuGet      | Manage .NET packages and configure NuGet repositories.                                   | ![red](https://img.shields.io/badge/status-unavailable-red)         |
-| Cargo      | Handle Rust packages and configure Cargo registries.                                     | ![red](https://img.shields.io/badge/status-unavailable-red)         |
-| Go Modules | Manage Go packages and configure module proxies.                                         | ![red](https://img.shields.io/badge/status-unavailable-red)         |
+| Cargo      | Handle Rust packages and configure Cargo registries.                                     | ![green](https://img.shields.io/badge/status-available-brightgreen) |
+| Go Modules | Manage Go packages and configure module proxies.                                         | ![green](https://img.shields.io/badge/status-available-brightgreen) |
 | Helm       | Configure Helm chart repositories for Kubernetes applications.                           | ![red](https://img.shields.io/badge/status-unavailable-red)         |
 | Conan      | Manage C/C++ packages and configure Conan repositories.                                  | ![red](https://img.shields.io/badge/status-unavailable-red)         |
 | Pub        | Handle Dart packages and configure Pub repositories.                                     | ![red](https://img.shields.io/badge/status-unavailable-red)         |

@@ -2,16 +2,18 @@
 exec regtool list
 ! stderr .
 stdout '^APP\s+REGION\s+URL$'
+stdout '^cargo\s+cn\s+sparse\+https://rsproxy\.cn/index/$'
 stdout '^gem\s+cn\s+https://mirrors\.tuna\.tsinghua\.edu\.cn/rubygems/$'
+stdout '^go\s+cn\s+https://goproxy\.cn$'
+stdout '^go\s+us\s+https://proxy\.golang\.org$'
 stdout '^npm\s+cn\s+https://registry\.npmmirror\.com$'
 stdout '^npm\s+eu\s+https://registry\.npmjs\.org$'
-stdout '^npm\s+us\s+https://registry\.npmjs\.org$'
 stdout '^pip\s+us\s+https://pypi\.org/simple$'
 stdout '^yarn\s+cn\s+https://registry\.npmmirror\.com$'
 
 # the same data is available as JSON, on stdout only.
 exec regtool list --json
 ! stderr .
-stdout '"app": "npm"'
+stdout '"app": "cargo"'
 stdout '"region": "cn"'
-stdout '"url": "https://registry.npmmirror.com"'
+stdout '"url": "https://goproxy.cn"'

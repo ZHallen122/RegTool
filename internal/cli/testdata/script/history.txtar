@@ -1,0 +1,26 @@
+# An untouched machine has no history.
+exec regtool history
+! stderr .
+stdout '^regtool has not changed anything yet$'
+
+# One change, one snapshot.
+cp npmrc $HOME/.npmrc
+exec regtool use cn npm
+
+exec regtool history
+! stderr .
+stdout '^ID\s+CREATED\s+NOTE\s+FILES$'
+stdout '^\S+\s+\S+\s+use cn\s+\.npmrc$'
+
+exec regtool history --json
+! stderr .
+stdout '"note": "use cn"'
+stdout '"path":'
+
+# undo is itself snapshotted, so the history grows rather than shrinking.
+exec regtool undo
+exec regtool history
+stdout 'before restore '
+
+-- npmrc --
+registry=https://registry.npmjs.org

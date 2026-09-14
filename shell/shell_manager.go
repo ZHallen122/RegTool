@@ -1,3 +1,7 @@
+// Package shell reads and writes `export KEY="value"` lines in the user's
+// shell configuration file. Homebrew is configured through environment
+// variables rather than a configuration file of its own, so it is the only
+// backend that needs this.
 package shell
 
 import (
@@ -6,10 +10,16 @@ import (
 	"strings"
 )
 
-// ShellManager is an interface for setting and getting environment variables in shell configuration files.
+// ShellManager reads and writes environment variables in one shell's
+// configuration file.
 type ShellManager interface {
+	// SetEnv exports key with the given value, replacing an existing export.
 	SetEnv(key, value string) error
+	// GetEnv returns the value exported for key.
 	GetEnv(key string) (string, error)
+	// Path is the configuration file the manager edits. It is empty when the
+	// path cannot be resolved.
+	Path() string
 }
 
 // ShellFactory is a function type that returns a new ShellManager.
@@ -23,7 +33,7 @@ func RegisterShell(name string, factory ShellFactory) {
 	shellFactories[name] = factory
 }
 
-// NewShellManager creates a new ShellManager based on the current shell.
+// NewShellManager returns a manager for the shell named by $SHELL.
 func NewShellManager() (ShellManager, error) {
 	shell := os.Getenv("SHELL")
 	for name, factory := range shellFactories {
@@ -31,5 +41,5 @@ func NewShellManager() (ShellManager, error) {
 			return factory(), nil
 		}
 	}
-	return nil, fmt.Errorf("unsupported shell: %s", shell)
+	return nil, fmt.Errorf("unsupported shell: %q", shell)
 }

@@ -41,8 +41,12 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return tui.Run()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			svc, err := loadService(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return tui.Run(svc)
 		},
 	}
 
@@ -54,6 +58,8 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		newUseCommand(),
 		newStatusCommand(),
 		newListCommand(),
+		newHistoryCommand(),
+		newUndoCommand(),
 		newRefreshCommand(),
 		newVersionCommand(),
 	)
@@ -63,18 +69,6 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 // loadService builds the service the subcommands run against.
 func loadService(ctx context.Context) (*service.Service, error) {
 	return service.Load(ctx)
-}
-
-// changeErrors folds the per-app failures of a run into a single error so the
-// process can exit non-zero after the table has been printed.
-func changeErrors(results []service.ChangeResult) error {
-	var errs []error
-	for _, result := range results {
-		if result.Err != nil {
-			errs = append(errs, result.Err)
-		}
-	}
-	return errors.Join(errs...)
 }
 
 // statusErrors does the same for the per-app failures of a status run.

@@ -1,29 +1,94 @@
 package tui
 
 import (
+	"context"
+	"fmt"
 	"strings"
-	"time"
-	"unicode"
 
-	"github.com/ZHallen122/RegTool/source"
+	"github.com/ZHallen122/RegTool/internal/service"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// entriesMsg carries the mirrors a page asked for, or the error that stopped
+// them from arriving.
+type entriesMsg struct {
+	app     string
+	entries []service.RegistryEntry
+	err     error
+}
+
+// listCmd loads the mirrors of one app, or of every app when app is empty.
+func listCmd(svc *service.Service, app string) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := svc.List(context.Background(), app)
+		return entriesMsg{app: app, entries: entries, err: err}
+	}
+}
+
+// renderEntries lays the mirrors out grouped by app, and returns the lines so
+// the caller can scroll them.
+func renderEntries(entries []service.RegistryEntry, width int) []string {
+	lines := make([]string, 0, len(entries)*2)
+	app := ""
+	for _, entry := range entries {
+		if entry.App != app {
+			app = entry.App
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, GetStyledTitle(app))
+		}
+		lines = append(lines, GetInfoText(fmt.Sprintf("  %-4s", entry.Region))+" "+GetSuccessText(truncate(entry.URL, width)))
+	}
+	return lines
+}
+
+// truncate shortens a URL that would not fit the terminal.
+func truncate(text string, width int) string {
+	if width <= 4 || len(text) <= width {
+		return text
+	}
+	return text[:width-1] + "…"
+}
+
+// scrollView renders the visible slice of lines with the page's chrome.
+func scrollView(title string, lines []string, scroll, height int, loading bool, err error, footer string) string {
+	var out strings.Builder
+	out.WriteString(GetStyledTitle(title) + "\n\n")
+
+	switch {
+	case err != nil:
+		out.WriteString(GetErrorText("Error: "+err.Error()) + "\n")
+	case loading:
+		out.WriteString(GetInfoText("Loading...") + "\n")
+	default:
+		end := min(scroll+height, len(lines))
+		for _, line := range lines[min(scroll, end):end] {
+			out.WriteString(line + "\n")
+		}
+	}
+
+	out.WriteString("\n" + GetInfoText(footer) + "\n")
+	return out.String()
+}
+
 type listAllRegistryModel struct {
-	output     []string
-	done       bool
-	messagesCh chan string
-	scroll     int
-	height     int
-	width      int
+	svc     *service.Service
+	lines   []string
+	err     error
+	loading bool
+	scroll  int
+	height  int
+	width   int
+}
+
+func newListAllRegistryModel(svc *service.Service) listAllRegistryModel {
+	return listAllRegistryModel{svc: svc, loading: true, height: 20, width: 80}
 }
 
 func (m listAllRegistryModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.startListingRegistries(),
-		tickEvery(),
-	)
+	return listCmd(m.svc, "")
 }
 
 func (m listAllRegistryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -37,187 +102,27 @@ func (m listAllRegistryModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll--
 			}
 		case "down", "j":
-			if m.scroll < len(m.output)-m.height {
+			if m.scroll < len(m.lines)-m.height {
 				m.scroll++
 			}
 		case "r":
-			if m.done {
-				m.output = nil
-				m.done = false
-				m.messagesCh = make(chan string)
-				m.scroll = 0
-				return m, tea.Batch(
-					m.startListingRegistries(),
-					tickEvery(),
-				)
+			if !m.loading {
+				m.loading, m.lines, m.err, m.scroll = true, nil, nil, 0
+				return m, listCmd(m.svc, "")
 			}
 		}
 	case tea.WindowSizeMsg:
-		m.height = msg.Height - 6
-		m.width = msg.Width - 4
-	case tickMsg:
-		select {
-		case message, ok := <-m.messagesCh:
-			if !ok {
-				m.done = true
-				return m, nil
-			}
-			m.output = append(m.output, message)
-			if len(m.output) > m.height && m.scroll == len(m.output)-m.height-1 {
-				m.scroll++
-			}
-		default:
-			// No message available, do nothing
-		}
-		return m, tickEvery()
+		m.height = max(msg.Height-6, 1)
+		m.width = max(msg.Width-4, 20)
+	case entriesMsg:
+		m.loading = false
+		m.err = msg.err
+		m.lines = renderEntries(msg.entries, m.width)
 	}
 	return m, nil
 }
 
 func (m listAllRegistryModel) View() string {
-	var contentBuilder strings.Builder
-
-	visibleOutput := m.output
-	if len(m.output) > m.height {
-		start := m.scroll
-		end := m.scroll + m.height
-		if end > len(m.output) {
-			end = len(m.output)
-		}
-		visibleOutput = m.output[start:end]
-	}
-
-	for _, line := range visibleOutput {
-		if strings.HasPrefix(line, "APP: ") {
-			contentBuilder.WriteString("\n" + m.formatApp(line, m.output))
-		}
-	}
-
-	var finalBuilder strings.Builder
-	finalBuilder.WriteString(GetStyledTitle("Registry List") + "\n\n")
-	finalBuilder.WriteString(contentBuilder.String())
-	finalBuilder.WriteString("\n")
-
-	if m.done {
-		finalBuilder.WriteString(GetStyledQuitText() + "\n")
-		finalBuilder.WriteString(GetInfoText("Press 'r' to reload, use up/down arrows to scroll") + "\n")
-	} else {
-		finalBuilder.WriteString(GetInfoText("Loading... Use j/k arrows to scroll") + "\n")
-	}
-
-	return finalBuilder.String()
-}
-
-func (m listAllRegistryModel) formatApp(appLine string, allLines []string) string {
-	var builder strings.Builder
-	builder.WriteString(GetStyledTitle(appLine) + "\n")
-	inCurrentApp := false
-	for _, line := range allLines {
-		if line == appLine {
-			inCurrentApp = true
-			continue
-		}
-		if inCurrentApp {
-			if strings.HasPrefix(line, "APP: ") {
-				break
-			}
-			if strings.HasPrefix(line, "  REGION: ") {
-				parts := strings.SplitN(line, ", URL: ", 2)
-				builder.WriteString(m.wrapText(GetInfoText(parts[0]), m.width) + "\n")
-				if len(parts) > 1 {
-					builder.WriteString(m.wrapText(GetSuccessText("URL: "+parts[1]), m.width) + "\n")
-				}
-			} else if strings.HasPrefix(line, "ERROR: ") {
-				builder.WriteString(m.wrapText(GetErrorText(line), m.width) + "\n")
-			}
-		}
-	}
-	builder.WriteString("\n")
-	return builder.String()
-}
-
-func (m listAllRegistryModel) wrapText(text string, width int) string {
-	words := strings.Fields(removeColorAttributes(text))
-	if len(words) == 0 {
-		return ""
-	}
-
-	var lines []string
-	var currentLine string
-
-	for _, word := range words {
-		if len(currentLine)+len(word)+1 > width {
-			lines = append(lines, strings.TrimSpace(currentLine))
-			currentLine = word
-		} else {
-			if currentLine != "" {
-				currentLine += " "
-			}
-			currentLine += word
-		}
-	}
-
-	if currentLine != "" {
-		lines = append(lines, strings.TrimSpace(currentLine))
-	}
-
-	styledLines := make([]string, len(lines))
-	for i, line := range lines {
-		styledLines[i] = applyOriginalStyle(text, line)
-	}
-
-	return strings.Join(styledLines, "\n    ")
-}
-
-func removeColorAttributes(s string) string {
-	var result strings.Builder
-	inEscapeSeq := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscapeSeq = true
-		} else if inEscapeSeq {
-			if unicode.IsLetter(r) {
-				inEscapeSeq = false
-			}
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return result.String()
-}
-
-func applyOriginalStyle(original, wrapped string) string {
-	if strings.HasPrefix(original, GetInfoText("")) {
-		return GetInfoText(wrapped)
-	} else if strings.HasPrefix(original, GetSuccessText("")) {
-		return GetSuccessText(wrapped)
-	} else if strings.HasPrefix(original, GetErrorText("")) {
-		return GetErrorText(wrapped)
-	}
-	return wrapped
-}
-
-func (m listAllRegistryModel) startListingRegistries() tea.Cmd {
-	return func() tea.Msg {
-		go source.ListAllRegistry(m.messagesCh)
-		return nil
-	}
-}
-
-func tickEvery() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
-}
-
-func NewListAllRegistryModel() listAllRegistryModel {
-	return listAllRegistryModel{
-		messagesCh: make(chan string),
-		height:     20,
-		width:      80,
-	}
-}
-
-func init() {
-	RegisterCommand("listAllRegistry", "List All Registry", NewListAllRegistryModel())
+	return scrollView("Registry List", m.lines, m.scroll, m.height, m.loading, m.err,
+		"Press 'q' to go back, 'r' to reload, use j/k to scroll")
 }

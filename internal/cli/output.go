@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 	"text/tabwriter"
+	"time"
 
+	"github.com/ZHallen122/RegTool/internal/history"
 	"github.com/ZHallen122/RegTool/internal/service"
 )
 
@@ -62,29 +66,95 @@ func writeEntries(w io.Writer, entries []service.RegistryEntry) error {
 	return flush(table)
 }
 
-func writeChanges(w io.Writer, results []service.ChangeResult, dryRun bool) error {
-	if len(results) == 0 {
+// writeUseResult prints what a `use` run did, or would do: one row per app and,
+// for a dry run, the unified diff of every file that would be rewritten.
+func writeUseResult(w io.Writer, result *service.UseResult) error {
+	if len(result.Changes) == 0 {
 		fmt.Fprintln(w, "nothing to change")
 		return nil
 	}
 
-	if dryRun {
+	if result.DryRun {
 		fmt.Fprintln(w, "dry run: no configuration was changed")
 	}
 
 	table := newTable(w)
 	fmt.Fprintln(table, "APP\tFROM\tTO\tRESULT")
-	for _, result := range results {
+	for _, change := range result.Changes {
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n",
-			result.App, orUnknown(result.From), orUnknown(result.To), changeOutcome(result, dryRun))
+			change.App, orUnknown(change.From), orUnknown(change.To), changeOutcome(change, result.DryRun))
+	}
+	if err := flush(table); err != nil {
+		return err
+	}
+
+	if result.DryRun {
+		for _, change := range result.Changes {
+			if change.Diff == "" {
+				continue
+			}
+			fmt.Fprintf(w, "\n%s:\n%s", change.App, change.Diff)
+		}
+		return nil
+	}
+
+	if result.SnapshotID != "" {
+		fmt.Fprintf(w, "\nsnapshot %s: run 'regtool undo' to put it back\n", result.SnapshotID)
+	}
+	return nil
+}
+
+// writeSnapshots prints the snapshot history, newest first.
+func writeSnapshots(w io.Writer, snapshots []history.Snapshot) error {
+	if len(snapshots) == 0 {
+		fmt.Fprintln(w, "regtool has not changed anything yet")
+		return nil
+	}
+
+	table := newTable(w)
+	fmt.Fprintln(table, "ID\tCREATED\tNOTE\tFILES")
+	for _, snapshot := range snapshots {
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n",
+			snapshot.ID,
+			snapshot.CreatedAt.Local().Format(time.RFC3339),
+			orUnknown(snapshot.Note),
+			snapshotFiles(snapshot))
 	}
 	return flush(table)
 }
 
-func changeOutcome(result service.ChangeResult, dryRun bool) string {
+// snapshotFiles names the files a snapshot captured, by base name so the table
+// stays readable.
+func snapshotFiles(snapshot history.Snapshot) string {
+	if len(snapshot.Files) == 0 {
+		return unknownValue
+	}
+	names := make([]string, 0, len(snapshot.Files))
+	for _, file := range snapshot.Files {
+		names = append(names, filepath.Base(file.Path))
+	}
+	return strings.Join(names, ", ")
+}
+
+// writeRestored reports what an undo put back.
+func writeRestored(w io.Writer, snapshot *history.Snapshot) error {
+	fmt.Fprintf(w, "restored snapshot %s (%s)\n", snapshot.ID, orUnknown(snapshot.Note))
+	for _, file := range snapshot.Files {
+		state := "restored"
+		if !file.Existed {
+			state = "removed"
+		}
+		fmt.Fprintf(w, "  %s %s\n", state, file.Path)
+	}
+	return nil
+}
+
+func changeOutcome(change service.ChangeResult, dryRun bool) string {
 	switch {
-	case result.Err != nil:
-		return "error: " + result.Err.Error()
+	case change.Err != nil:
+		return "error: " + change.Err.Error()
+	case change.Noop:
+		return "already set"
 	case dryRun:
 		return "would change"
 	default:

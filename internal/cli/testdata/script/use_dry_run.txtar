@@ -1,28 +1,26 @@
-# a dry run reports the change it would make...
+# A dry run prints the diff it would apply and leaves the file untouched.
+cp npmrc $HOME/.npmrc
+
 exec regtool use cn npm --dry-run
 ! stderr .
 stdout '^dry run: no configuration was changed$'
-stdout '^npm\s+https://registry\.npmjs\.org/\s+https://registry\.npmmirror\.com\s+would change$'
+stdout '^npm\s+https://registry\.npmjs\.org\s+https://registry\.npmmirror\.com\s+would change$'
+stdout '^npm:$'
+stdout '^-registry=https://registry\.npmjs\.org$'
+stdout '^\+registry=https://registry\.npmmirror\.com$'
 
-# ...and leaves the backend exactly where it was.
-exec regtool status
-stdout '^npm\s+us\s+https://registry\.npmjs\.org/$'
+# Nothing was written and nothing was snapshotted.
+cmp $HOME/.npmrc npmrc
+exec regtool history
+stdout '^regtool has not changed anything yet$'
 
-# without --dry-run the change is applied.
-exec regtool use cn npm
+# --json carries the diff too.
+exec regtool use cn npm --dry-run --json
 ! stderr .
-stdout '^npm\s+https://registry\.npmjs\.org/\s+https://registry\.npmmirror\.com\s+changed$'
+stdout '"dryRun": true'
+stdout '"app": "npm"'
+stdout 'registry=https://registry.npmmirror.com'
+cmp $HOME/.npmrc npmrc
 
-exec regtool status
-stdout '^npm\s+cn\s+https://registry\.npmmirror\.com$'
-stdout '^pip\s+local\s+https://pypi\.example\.com/simple$'
-
-# with no app names every installed app is switched.
-exec regtool use us --json
-! stderr .
-stdout '"app": "pip"'
-stdout '"to": "https://pypi.org/simple"'
-
-exec regtool status
-stdout '^npm\s+us\s+https://registry\.npmjs\.org$'
-stdout '^pip\s+us\s+https://pypi\.org/simple$'
+-- npmrc --
+registry=https://registry.npmjs.org

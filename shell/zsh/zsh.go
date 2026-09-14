@@ -1,18 +1,31 @@
+// Package zsh edits ~/.zshrc.
 package zsh
 
 import "github.com/ZHallen122/RegTool/shell"
 
-// Zsh represents the zsh shell.
+// rcFile is the zsh configuration file, relative to the home directory.
+const rcFile = ".zshrc"
+
+// Zsh edits the zsh configuration file.
 type Zsh struct{}
 
-// SetEnv writes the environment variable to the zsh configuration file.
+// SetEnv exports key in ~/.zshrc.
 func (z Zsh) SetEnv(key, value string) error {
-	return shell.SetEnvVarToFile(".zshrc", key, value)
+	return shell.SetEnvVarToFile(rcFile, key, value)
 }
 
-// GetEnv reads the environment variable from the zsh configuration file.
+// GetEnv reads the value exported for key from ~/.zshrc.
 func (z Zsh) GetEnv(key string) (string, error) {
-	return shell.GetEnvVarFromFile(".zshrc", key)
+	return shell.GetEnvVarFromFile(rcFile, key)
+}
+
+// Path is the absolute path of ~/.zshrc.
+func (z Zsh) Path() string {
+	path, err := shell.RCPath(rcFile)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 // init registers the Zsh shell manager.
