@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/ZHallen122/RegTool/common/alias"
@@ -61,9 +62,18 @@ func GetRemoteRegistrySources(ctx context.Context) (*structs.RegistrySources, er
 	return &sources, nil
 }
 
+// OfflineEnvVar, when set to a non-empty value, makes LoadRegistrySources skip
+// the remote fetch entirely and use the embedded sources. Tests rely on it so
+// they never touch the network.
+const OfflineEnvVar = "REGTOOL_OFFLINE"
+
 // LoadRegistrySources returns the remote sources when they are reachable and
 // falls back to the embedded copy otherwise.
 func LoadRegistrySources(ctx context.Context) (*structs.RegistrySources, error) {
+	if os.Getenv(OfflineEnvVar) != "" {
+		return GetEmbeddedRegistrySources()
+	}
+
 	sources, err := GetRemoteRegistrySources(ctx)
 	if err == nil {
 		return sources, nil
