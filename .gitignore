@@ -1,3 +1,8 @@
 regtool
 regtool.exe
 dist/
+regtool-hub
+regtool-hub.exe
+*.db
+*.db-wal
+*.db-shm

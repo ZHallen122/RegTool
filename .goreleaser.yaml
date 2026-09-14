@@ -24,8 +24,29 @@ builds:
       - -X github.com/ZHallen122/RegTool/internal/cli.Commit={{ .ShortCommit }}
       - -X github.com/ZHallen122/RegTool/internal/cli.Date={{ .Date }}
 
+  # The optional hub service. It is a separate build and a separate archive so
+  # the regtool archive keeps exactly the contents the Homebrew formula and the
+  # Scoop manifest already expect.
+  - id: hub
+    binary: regtool-hub
+    main: ./cmd/regtool-hub
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
 archives:
   - id: regtool
+    ids: [regtool]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -34,6 +55,36 @@ archives:
     files:
       - README.md
       - LICENSE
+
+  - id: hub
+    ids: [hub]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "regtool-hub_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+dockers:
+  - id: hub
+    ids: [hub]
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.goreleaser
+    image_templates:
+      - "ghcr.io/zhallen122/regtool-hub:{{ .Version }}"
+      - "ghcr.io/zhallen122/regtool-hub:latest"
+    build_flag_templates:
+      - "--label=org.opencontainers.image.title=regtool-hub"
+      - "--label=org.opencontainers.image.description=Serves the regtool mirror list and checks the mirrors in it"
+      - "--label=org.opencontainers.image.url=https://github.com/ZHallen122/RegTool"
+      - "--label=org.opencontainers.image.source=https://github.com/ZHallen122/RegTool"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
 
 checksum:
   name_template: "checksums.txt"
@@ -63,6 +114,10 @@ changelog:
 
 brews:
   - name: regtool
+    # Only the CLI archive. Without this the formula would try to package the
+    # hub archives too, and `brew install regtool` would start shipping a
+    # server nobody asked for.
+    ids: [regtool]
     repository:
       owner: ZHallen122
       name: homebrew-tap
@@ -79,6 +134,7 @@ brews:
 
 scoops:
   - name: regtool
+    ids: [regtool]
     repository:
       owner: ZHallen122
       name: scoop-bucket

@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: regtool-hub
+    # The hub checks its mirrors on its own schedule and exports the last
+    # result as a gauge, so scraping faster than the check interval just
+    # repeats a value — 15s is for the HTTP and runtime metrics.
+    static_configs:
+      - targets: ["hub:8080"]

@@ -1,4 +1,6 @@
-.PHONY: build test vet lint snapshot install
+.PHONY: build hub hub-run test vet lint snapshot install compose-up compose-down
+
+COMPOSE := docker compose -f deploy/docker-compose.yml
 
 PKG := github.com/ZHallen122/RegTool/internal/cli
 VERSION ?= $(shell git describe --tags --always --dirty)
@@ -8,6 +10,12 @@ LDFLAGS := -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Dat
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o regtool .
+
+hub:
+	go build -o regtool-hub ./cmd/regtool-hub
+
+hub-run:
+	go run ./cmd/regtool-hub --log-level debug
 
 test:
 	go test -race ./...
@@ -23,3 +31,11 @@ snapshot:
 
 install:
 	go install -ldflags "$(LDFLAGS)" .
+
+compose-up:
+	$(COMPOSE) up -d --build
+
+# -v also drops the check history and the Grafana state, which is what you want
+# from a stack you brought up to try it.
+compose-down:
+	$(COMPOSE) down -v

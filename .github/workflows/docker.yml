@@ -1,0 +1,30 @@
+name: Docker
+
+# The image is only published from a tag, by the release workflow. This job
+# exists to catch a Dockerfile that stopped building before a release tries it,
+# so it builds and throws the result away.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: regtool-hub:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

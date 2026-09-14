@@ -135,7 +135,7 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 - [x] 生成 SBOM，二进制用 `-ldflags` 注入版本号，`regtool version` 可查。
 - [x] README 重写：一句话介绍、安装方式、支持矩阵。（asciinema 演示仍是 TODO 占位）
 - [x] 删掉 `tools/gen-proj-banner`，横幅图直接放 `assets/`。
-- [ ] 发 v1.0.0。（需要先把 `TAP_GITHUB_TOKEN` secret 加到仓库，再推 `v1.0.0` 标签）
+- [x] 发 v1.0.0。（2026-09-14 发布，release workflow 一次通过，formula 和 scoop manifest 自动推送）
 
 验收：`brew install <tap>/regtool` 或 `scoop install regtool` 能装，`regtool version` 正确。
 
@@ -143,11 +143,11 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：补一段服务端经验，但控制规模。
 
-- [ ] 一个小 Go HTTP 服务托管 `sources.json`，带 ETag 和缓存头。
-- [ ] 定时对所有镜像做健康检查，结果落 SQLite。
-- [ ] `/v1/sources`、`/v1/health`、`/metrics`（Prometheus）。
-- [ ] Docker 镜像和 docker-compose。
-- [ ] CLI 支持配置源服务地址，并在拉不到时回退到本地缓存。
+- [x] 一个小 Go HTTP 服务托管 `sources.json`，带 ETag 和缓存头。
+- [x] 定时对所有镜像做健康检查，结果落 SQLite。
+- [x] `/v1/sources`、`/v1/health`、`/metrics`（Prometheus）。
+- [x] Docker 镜像和 docker-compose。
+- [x] CLI 支持配置源服务地址，并在拉不到时回退到本地缓存。
 
 验收：`docker compose up` 后 CLI 能从本地服务拉源列表；Grafana 能看到健康检查指标。
 
@@ -171,5 +171,6 @@ Step 5 保证项目能被安装和使用，star 和 issue 才会来。Step 6 是
 | --- | --- |
 | 2026-09-13 | 完成现状分析，写下本路线图 |
 | 2026-09-14 | Step 1 完成（PR #2 #3 #4 #5）：可直接 build，net/http + 内嵌默认源，错误上抛，lint + 三平台 CI，模块路径改为 github.com/ZHallen122/RegTool。全局可变状态和 Windows 支持留到 Step 2 / 3 处理 |
+| 2026-09-14 | Step 6 完成（PR #13 #14）：`regtool-hub` 服务（`/v1/sources` 带 ETag/304、定时探测落 SQLite、`/v1/health`、Prometheus `/metrics`、优雅退出），distroless 镜像 + compose（Prometheus + 预配置 Grafana 仪表盘），goreleaser 加第二个二进制并推 ghcr；CLI 侧 `source.Loader` 加载链 远端 → 缓存 → 内嵌，`REGTOOL_SOURCES_URL` / `REGTOOL_CONFIG_DIR`，`regtool sources`。路线图六步全部完成 |
 | 2026-09-14 | Step 4 完成（PR #12）：`internal/probe` 用 errgroup 限流 + 每个探测独立超时并发探测镜像，`regtool doctor` 和 `regtool use --fastest`，httptest 覆盖慢源 / 挂掉 / 拒绝连接 / 取消，`-race` 通过。Step 5 完成（PR #11）：goreleaser 六平台 + SBOM，`release.yml` 标签触发，homebrew-tap 和 scoop-bucket 仓库已建，README 重写，MIT LICENSE。剩 v1.0.0 待发 |
 | 2026-09-14 | Step 2 / Step 3 完成：service 层改到 `internal/backend` + `internal/history` 之上，`use` 变成「先快照、后原子写」的事务，新增 `regtool undo` / `regtool history` 和 `--dry-run` 的 unified diff；CLI 和 TUI 共用同一个 service；新增 go / cargo 两个后端的镜像源；删掉 `source/app/**`、`common/alias` 和 `source` 里的全局可变状态。homebrew 仍然是 exec 调 `brew`，因为它靠环境变量配置，没有自己的配置文件 |

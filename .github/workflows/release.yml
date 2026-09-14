@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  # The regtool-hub image is published to this repository's ghcr namespace.
+  packages: write
 
 jobs:
   goreleaser:
@@ -20,6 +22,12 @@ jobs:
           go-version-file: go.mod
 
       - uses: anchore/sbom-action/download-syft@v0
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: goreleaser/goreleaser-action@v6
         with:
