@@ -13,7 +13,8 @@ Point npm, yarn, pip, gem, go, cargo and homebrew at the registry mirror closest
 - **Atomic writes.** Every file is written to a temporary file in the same directory, fsynced and renamed over the target, so a reader sees either the old file or the new one — never half of each.
 - **Snapshot and undo.** Every file a change is about to touch is copied into a snapshot first. `regtool undo` puts it back byte for byte, and the restore is itself snapshotted, so an undo can be undone.
 - **Dry-run diff.** `--dry-run` prints the unified diff of every file that would be rewritten and writes nothing.
-- **Offline embedded mirror list.** The mirror list is fetched remotely when it is reachable and falls back to the copy embedded in the binary. `REGTOOL_OFFLINE=1` skips the network entirely.
+- **Offline embedded mirror list.** The mirror list is fetched from a configurable URL, cached locally with its ETag, and falls back to the cache and then to the copy embedded in the binary. `REGTOOL_OFFLINE=1` skips the network entirely.
+- **Concurrent mirror probing.** `regtool doctor` measures every mirror in parallel; `regtool use --fastest` picks the quickest region per backend.
 - **CLI and TUI.** Scriptable subcommands with `--json` for automation, an interactive interface when you would rather click around.
 - **Cross platform.** Linux, macOS and Windows; every path goes through `os.UserConfigDir` and `path/filepath`.
 
@@ -130,11 +131,31 @@ regtool v1.0.0 (3f9a1c2, built 2026-09-14T04:15:30Z, darwin/arm64)
 to stdout so it can be piped into `jq`. Errors go to stderr and the process
 exits with status 1.
 
-### Coming soon
+### Probing mirrors
 
-`regtool doctor` (environment diagnostics) and `regtool use --fastest`
-(concurrent mirror probing, then pick the fastest) are landing in a parallel
-pull request.
+`doctor` probes every mirror of every backend concurrently and reports latency
+and reachability, fastest first. `use --fastest` runs the same probe and then
+switches each backend to whichever region answered quickest:
+
+```console
+$ regtool doctor npm
+APP  REGION  URL                             LATENCY  STATUS
+npm  us      https://registry.npmjs.org      114ms    ok
+npm  cn      https://registry.npmmirror.com  675ms    ok
+npm  eu      https://registry.npmjs.org      120ms    ok
+
+$ regtool use --fastest npm --dry-run
+```
+
+Concurrency and the per-probe timeout are tunable with `--concurrency` and
+`--timeout`; `doctor` exits with status 1 only when no mirror answered at all.
+
+### Where the mirror list comes from
+
+`regtool sources` shows which mirror list is in effect and where it came from
+(`remote`, `cache`, `embedded` or a file), and `regtool sources refresh` forces
+a fetch. The resolution order and every related environment variable are
+documented in [`docs/sources.md`](./docs/sources.md).
 
 ## Supported backends
 
@@ -153,9 +174,10 @@ pull request.
 
 Three regions ship out of the box: `us`, `cn` and `eu`. The mirror list lives in
 [`source/sources.json`](./source/sources.json), which is embedded into the
-binary with `go:embed`. At runtime RegTool tries the remotely maintained copy
-first and falls back to the embedded one whenever the fetch fails, so it always
-works offline. Set `REGTOOL_OFFLINE=1` to skip the network fetch entirely.
+binary with `go:embed`. At runtime RegTool tries the remote copy first (`REGTOOL_SOURCES_URL`, or the
+default), then its local cache, then the embedded one, so it always works
+offline. Set `REGTOOL_OFFLINE=1` to skip the network fetch entirely; see
+[`docs/sources.md`](./docs/sources.md) for the full resolution order.
 
 ## Hub service (optional)
 
