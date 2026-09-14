@@ -71,18 +71,23 @@ func UpdateRegistry(region string, app string) error {
 		return &exec.Error{Name: "Failed to fetch remote sources", Err: err}
 	}
 
+	regionValue, ok := structs.StringToRegion(region)
+	if !ok {
+		return &exec.Error{Name: "Unknown region: " + region, Err: nil}
+	}
+
 	primaryApp := alias.GetPrimary(app)
 	aliases := alias.GetAllAliases(primaryApp)
 
 	if registryManager, ok := registryManagers[primaryApp]; ok {
-		_, _ = registryManager.SetRegistry(structs.StringToRegion(region), rs)
+		_, _ = registryManager.SetRegistry(regionValue, rs)
 	} else {
 		return &exec.Error{Name: "Key does not exist", Err: nil}
 	}
 
 	for _, alias := range aliases {
 		if registryManager, ok := registryManagers[alias]; ok {
-			_, _ = registryManager.SetRegistry(structs.StringToRegion(region), rs)
+			_, _ = registryManager.SetRegistry(regionValue, rs)
 		} else {
 			return &exec.Error{Name: "Key does not exist", Err: nil}
 		}

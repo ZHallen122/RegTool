@@ -3,13 +3,16 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regtool/source/structs"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 var (
-	regions = []string{"us", "cn", "eu", "jp"}
+	// regions is derived from structs so the menu can never offer a region the
+	// rest of the tool does not understand.
+	regions = structs.AllRegionStrings()
 )
 
 type mainMenuModel struct {
