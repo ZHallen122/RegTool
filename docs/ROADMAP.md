@@ -116,13 +116,13 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：一个能在面试里讲清楚的 Go 并发案例。
 
-- [ ] `regtool doctor`：并发探测所有镜像的延迟和可达性。
+- [x] `regtool doctor`：并发探测所有镜像的延迟和可达性。
   - `errgroup` 限制并发数。
   - `context` 控制整体超时和单次超时。
   - 结果按后端分组，表格输出。
-- [ ] `regtool use --fastest`：对每个后端探测所有地区的镜像，自动选最快的。
-- [ ] 探测逻辑注入 `http.Client`，测试用 `httptest.Server` 模拟慢源和挂掉的源。
-- [ ] `-race` 下测试通过。
+- [x] `regtool use --fastest`：对每个后端探测所有地区的镜像，自动选最快的。
+- [x] 探测逻辑注入 `http.Client`，测试用 `httptest.Server` 模拟慢源和挂掉的源。
+- [x] `-race` 下测试通过。
 
 验收：`regtool doctor` 在 3 秒内返回十几个镜像的结果；测试能覆盖超时、部分失败、全部失败。
 
@@ -130,12 +130,12 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：别人能装能用。
 
-- [ ] goreleaser：linux / macOS / windows，amd64 + arm64。
-- [ ] Homebrew tap 和 Scoop bucket。
-- [ ] 生成 SBOM，二进制用 `-ldflags` 注入版本号，`regtool version` 可查。
-- [ ] README 重写：一句话介绍、安装方式、asciinema 演示、支持矩阵。
-- [ ] 删掉 `tools/gen-proj-banner`，横幅图直接放 `assets/`。
-- [ ] 发 v1.0.0。
+- [x] goreleaser：linux / macOS / windows，amd64 + arm64。
+- [x] Homebrew tap 和 Scoop bucket。
+- [x] 生成 SBOM，二进制用 `-ldflags` 注入版本号，`regtool version` 可查。
+- [x] README 重写：一句话介绍、安装方式、支持矩阵。（asciinema 演示仍是 TODO 占位）
+- [x] 删掉 `tools/gen-proj-banner`，横幅图直接放 `assets/`。
+- [ ] 发 v1.0.0。（需要先把 `TAP_GITHUB_TOKEN` secret 加到仓库，再推 `v1.0.0` 标签）
 
 验收：`brew install <tap>/regtool` 或 `scoop install regtool` 能装，`regtool version` 正确。
 
@@ -171,4 +171,5 @@ Step 5 保证项目能被安装和使用，star 和 issue 才会来。Step 6 是
 | --- | --- |
 | 2026-09-13 | 完成现状分析，写下本路线图 |
 | 2026-09-14 | Step 1 完成（PR #2 #3 #4 #5）：可直接 build，net/http + 内嵌默认源，错误上抛，lint + 三平台 CI，模块路径改为 github.com/ZHallen122/RegTool。全局可变状态和 Windows 支持留到 Step 2 / 3 处理 |
+| 2026-09-14 | Step 4 完成（PR #12）：`internal/probe` 用 errgroup 限流 + 每个探测独立超时并发探测镜像，`regtool doctor` 和 `regtool use --fastest`，httptest 覆盖慢源 / 挂掉 / 拒绝连接 / 取消，`-race` 通过。Step 5 完成（PR #11）：goreleaser 六平台 + SBOM，`release.yml` 标签触发，homebrew-tap 和 scoop-bucket 仓库已建，README 重写，MIT LICENSE。剩 v1.0.0 待发 |
 | 2026-09-14 | Step 2 / Step 3 完成：service 层改到 `internal/backend` + `internal/history` 之上，`use` 变成「先快照、后原子写」的事务，新增 `regtool undo` / `regtool history` 和 `--dry-run` 的 unified diff；CLI 和 TUI 共用同一个 service；新增 go / cargo 两个后端的镜像源；删掉 `source/app/**`、`common/alias` 和 `source` 里的全局可变状态。homebrew 仍然是 exec 调 `brew`，因为它靠环境变量配置，没有自己的配置文件 |
