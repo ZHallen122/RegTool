@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -251,15 +252,24 @@ func TestStoreReopenKeepsRows(t *testing.T) {
 func TestDSNEscapesPaths(t *testing.T) {
 	t.Parallel()
 
-	// A Windows path is the interesting case: it has a drive letter, which must
-	// survive unescaped, and it may contain a space, which must not.
-	got := DSN(`C:\Program Files\regtool\hub.db`)
-	if want := "file:C:/Program%20Files/regtool/hub.db?"; !strings.HasPrefix(got, want) {
+	// The path is built with the platform's own separator, because that is what
+	// filepath.ToSlash has to turn into the forward slash a URI needs. The
+	// space must be escaped everywhere.
+	got := DSN(filepath.Join("some dir", "hub.db"))
+	if want := "file:some%20dir/hub.db?"; !strings.HasPrefix(got, want) {
 		t.Errorf("DSN = %q, want it to start with %q", got, want)
 	}
 	for _, pragma := range []string{"journal_mode(WAL)", "busy_timeout(5000)"} {
 		if !strings.Contains(got, pragma) {
 			t.Errorf("DSN %q is missing the %s pragma", got, pragma)
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		// A drive letter's colon is legal in a URI path and must not be
+		// escaped, or SQLite is handed a path it cannot open.
+		if want := "file:C:/hub.db?"; !strings.HasPrefix(DSN(`C:\hub.db`), want) {
+			t.Errorf("DSN(%q) = %q, want it to start with %q", `C:\hub.db`, DSN(`C:\hub.db`), want)
 		}
 	}
 }
