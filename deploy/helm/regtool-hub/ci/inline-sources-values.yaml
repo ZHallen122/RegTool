@@ -1,0 +1,21 @@
+# An inline mirror list, which turns on the ConfigMap, the --sources flag and
+# the checksum annotation that rolls the pod when the list changes. The shape
+# is source/sources.json's: region -> package manager -> mirror URLs.
+hub:
+  checkInterval: 30s
+  logLevel: debug
+  sources: |
+    {
+      "us": {
+        "npm": ["https://registry.npmjs.org"],
+        "pip": ["https://pypi.org/simple"]
+      },
+      "cn": {
+        "npm": ["https://registry.npmmirror.com"],
+        "pip": ["https://pypi.tuna.tsinghua.edu.cn/simple"]
+      },
+      "eu": {
+        "npm": ["https://registry.npmjs.org"],
+        "pip": ["https://pypi.org/simple"]
+      }
+    }

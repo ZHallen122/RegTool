@@ -43,3 +43,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+  # The chart is published only once the images and archives it points at
+  # exist, so it never names a tag nobody can pull.
+  helm:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.22.0
+
+      # The chart and the app move together on a release: both take the tag
+      # with its leading v stripped, which is what Helm's SemVer wants.
+      - name: Package the chart
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          helm package deploy/helm/regtool-hub \
+            --version "$version" \
+            --app-version "$version" \
+            --destination dist
+          ls -l dist
+
+      - name: Log in to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Push the chart
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          helm push "dist/regtool-hub-${version}.tgz" oci://ghcr.io/zhallen122/charts

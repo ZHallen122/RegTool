@@ -258,6 +258,41 @@ than the retention window is swept after each check. Logs are `log/slog` JSON,
 and `SIGINT` or `SIGTERM` stops the checker and drains in-flight requests for up
 to ten seconds.
 
+### Deploying to Kubernetes
+
+A Helm chart lives in [`deploy/helm/regtool-hub`](./deploy/helm/regtool-hub) and
+is published to the same ghcr namespace as the image:
+
+```sh
+helm install regtool-hub oci://ghcr.io/zhallen122/charts/regtool-hub \
+  --namespace regtool --create-namespace
+```
+
+Reach it the same way as any other ClusterIP service:
+
+```sh
+kubectl -n regtool port-forward svc/regtool-hub 8080:8080
+curl http://localhost:8080/v1/sources
+```
+
+If you run the Prometheus Operator, `serviceMonitor.enabled=true` adds a
+ServiceMonitor for `/metrics`. It is off by default because the CRD is not in a
+stock cluster, and most operators only pick up ServiceMonitors carrying a
+particular label:
+
+```sh
+helm upgrade regtool-hub oci://ghcr.io/zhallen122/charts/regtool-hub \
+  --set serviceMonitor.enabled=true \
+  --set serviceMonitor.labels.release=kube-prometheus-stack
+```
+
+Keep `replicaCount` at 1. The check history is a SQLite file on a ReadWriteOnce
+volume and wants a single writer; a second replica would either fail to attach
+the volume or have two processes writing the same database, and it would buy
+nothing, because the mirror list is identical on every pod. To cover a second
+network, run a second release there. The chart's
+[README](./deploy/helm/regtool-hub/README.md) has the full values table.
+
 ### Pointing the CLI at a hub
 
 Set `REGTOOL_SOURCES_URL` to the hub's `/v1/sources` and the CLI fetches its
@@ -276,6 +311,9 @@ make build      # build ./regtool with version, commit and date injected
 make hub        # build ./regtool-hub
 make hub-run    # run the hub locally with debug logging
 make compose-up # hub + Prometheus + Grafana (make compose-down to tear down)
+make helm-lint  # helm lint the chart against every file in its ci/ directory
+make helm-template # render the chart for every one of those value files
+make kind-e2e   # install the chart into a throwaway kind cluster and curl it
 make test       # go test -race ./...
 make vet        # go vet ./...
 make lint       # golangci-lint v2.5.0

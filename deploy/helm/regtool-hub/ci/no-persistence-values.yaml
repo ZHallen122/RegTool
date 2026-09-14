@@ -1,0 +1,3 @@
+# The ephemeral shape: /data is an emptyDir, so no PVC is rendered.
+persistence:
+  enabled: false

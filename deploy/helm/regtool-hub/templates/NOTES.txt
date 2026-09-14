@@ -1,0 +1,38 @@
+{{ include "regtool-hub.fullname" . }} is installed in namespace {{ .Release.Namespace }}.
+
+Reach it from your machine:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "regtool-hub.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+Then:
+
+  curl http://localhost:{{ .Values.service.port }}/v1/sources     # the mirror list
+  curl http://localhost:{{ .Values.service.port }}/v1/health      # the latest check per mirror
+  curl http://localhost:{{ .Values.service.port }}/metrics        # Prometheus exposition
+
+Point the CLI at it:
+
+  export REGTOOL_SOURCES_URL=http://localhost:{{ .Values.service.port }}/v1/sources
+  regtool list npm
+
+Check the release:
+
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+{{ if not .Values.persistence.enabled -}}
+WARNING: persistence is disabled, so /data is an emptyDir and the check history
+is lost on every restart. The mirror list is unaffected. Set
+persistence.enabled=true for anything longer-lived than a demo.
+{{ end -}}
+{{- if gt (int .Values.replicaCount) 1 }}
+WARNING: replicaCount is {{ .Values.replicaCount }}. The hub keeps its history in a SQLite
+file on a ReadWriteOnce volume and expects a single writer; more than one
+replica will either fail to schedule or corrupt the database.
+{{- end }}
+{{- if .Values.serviceMonitor.enabled }}
+
+A ServiceMonitor was created. It is only picked up if your Prometheus
+Operator's serviceMonitorSelector matches its labels — set
+serviceMonitor.labels accordingly (for kube-prometheus-stack that is usually
+`release: <the prometheus release name>`).
+{{- end }}

@@ -1,0 +1,12 @@
+# Patterns to ignore when packaging the chart.
+.DS_Store
+.git/
+.gitignore
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# The ci/ values files exist to be linted from the repository, not to ship
+# inside the packaged chart.
+ci/

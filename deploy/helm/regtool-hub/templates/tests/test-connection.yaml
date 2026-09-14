@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "regtool-hub.fullname" . }}-test-connection
+  labels:
+    {{- include "regtool-hub.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    # Deleted before the next run rather than after this one, so a failed test
+    # leaves its logs behind to read.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    # The hub's own image is distroless: no shell, no wget. The test therefore
+    # runs from busybox against the Service.
+    - name: wget
+      image: "{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - wget
+      args:
+        # -O - puts the body on stdout, so `helm test --logs` shows what the
+        # hub actually answered rather than just an exit code.
+        - -q
+        - -T
+        - "10"
+        - -O
+        - "-"
+        - "http://{{ include "regtool-hub.fullname" . }}:{{ .Values.service.port }}/healthz"

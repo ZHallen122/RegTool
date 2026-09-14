@@ -1,0 +1,5 @@
+# A volume managed outside the chart: the PVC template must be skipped and the
+# Deployment must mount the named claim.
+persistence:
+  enabled: true
+  existingClaim: regtool-hub-data
