@@ -79,7 +79,7 @@ func Run() {
 	RegisterCommand(mainMenuName, "Main Menu", newMainMenuModel())
 	p := tea.NewProgram(newMainMenuModel())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, errorStyle.Render(fmt.Sprintf("Error: %v\n", err)))
+		fmt.Fprint(os.Stderr, errorStyle.Render(fmt.Sprintf("Error: %v\n", err)))
 		os.Exit(1)
 	}
 }

@@ -67,7 +67,7 @@ The process described here has several goals:
 
 Make sure you have the following tools installed:
 
-- [Go](https://golang.org/doc/install) (1.16 or higher)
+- [Go](https://golang.org/doc/install) (1.25 or higher)
 - [Git](https://git-scm.com/)
 
 ### Clone the Repository
@@ -82,10 +82,10 @@ Make sure you have the following tools installed:
 
 ### Build the Project
 
-1. Run the following command to generate the `initall.go` file and build the project:
+1. Run the following command to build the project:
 
    ```sh
-   make
+   make build
    ```
 
 ### Run the Project
