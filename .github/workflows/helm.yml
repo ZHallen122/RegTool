@@ -1,0 +1,186 @@
+name: Helm
+
+# The chart is only published from a tag, by the release workflow. This one
+# proves the chart renders and that what it renders actually runs: a kind
+# cluster, the image built from this commit, and the endpoints the CLI and
+# Prometheus depend on.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "deploy/helm/**"
+      - "Dockerfile"
+      - "cmd/**"
+      - "internal/hub/**"
+      - ".github/workflows/helm.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "deploy/helm/**"
+      - "Dockerfile"
+      - "cmd/**"
+      - "internal/hub/**"
+      - ".github/workflows/helm.yml"
+
+permissions:
+  contents: read
+
+env:
+  # Pinned so a helm release cannot change what CI means without a commit.
+  HELM_VERSION: v3.22.0
+  CHART: deploy/helm/regtool-hub
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # Every file in ci/ is one value combination the chart has to keep
+      # rendering. Linting them in a loop is the chart-testing idea without
+      # the `ct` tool.
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          helm lint "$CHART" --strict
+          for values in "$CHART"/ci/*-values.yaml; do
+            echo "::group::helm lint -f $values"
+            helm lint "$CHART" --strict --values "$values"
+            echo "::endgroup::"
+          done
+
+      - name: helm template
+        run: |
+          set -euo pipefail
+          for values in "$CHART"/ci/*-values.yaml; do
+            echo "::group::helm template -f $values"
+            helm template regtool-hub "$CHART" --values "$values"
+            echo "::endgroup::"
+          done
+
+  kind-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into kind rather than pushed, so the e2e tests the image built
+      # from this commit and never reaches a registry.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: regtool-hub:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: regtool-hub-e2e
+
+      - name: Load the image into kind
+        run: kind load docker-image regtool-hub:ci --name regtool-hub-e2e
+
+      # A 30s check interval is what makes /v1/health non-empty inside the job's
+      # patience; the chart's 5m default is right for a real deployment.
+      - name: helm install
+        run: |
+          helm install regtool-hub "$CHART" \
+            --set image.repository=regtool-hub \
+            --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --set hub.checkInterval=30s \
+            --wait --timeout 3m
+
+      - name: kubectl rollout status
+        run: kubectl rollout status deployment/regtool-hub --timeout 2m
+
+      - name: helm test
+        run: helm test regtool-hub --logs
+
+      - name: Port-forward the service
+        run: |
+          kubectl port-forward svc/regtool-hub 8080:8080 &
+          echo $! > /tmp/port-forward.pid
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://localhost:8080/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the port-forward never became usable" >&2
+          exit 1
+
+      - name: /readyz answers 200
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/readyz)
+          echo "/readyz -> $code"
+          test "$code" = "200"
+
+      # The CLI polls /v1/sources on every run and depends on the 304 to keep
+      # that cheap, so the conditional-request path is the one thing here worth
+      # asserting end to end.
+      - name: /v1/sources serves an ETag and honours If-None-Match
+        run: |
+          set -euo pipefail
+          etag=$(curl -fsS -D - -o /dev/null http://localhost:8080/v1/sources \
+            | tr -d '\r' | awk 'tolower($1) == "etag:" { print $2 }')
+          echo "ETag: ${etag:-<none>}"
+          test -n "$etag"
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "If-None-Match: $etag" http://localhost:8080/v1/sources)
+          echo "If-None-Match -> $code"
+          test "$code" = "304"
+
+      # The first round of checks has to reach the real mirrors, so this polls
+      # rather than asserting once.
+      - name: /v1/health fills in
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            body=$(curl -fsS http://localhost:8080/v1/health)
+            count=$(printf '%s' "$body" | jq '.results | length')
+            if [ "$count" -gt 0 ]; then
+              printf '%s' "$body" | jq '.results[0]'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "no check results after 60s" >&2
+          curl -fsS http://localhost:8080/v1/health >&2
+          exit 1
+
+      - name: /metrics exports the mirror gauge
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:8080/metrics | tee /tmp/metrics.txt >/dev/null
+          grep -q '^regtool_hub_mirror_up' /tmp/metrics.txt
+          grep '^regtool_hub_mirror_up' /tmp/metrics.txt | head -5
+
+      - name: Dump the cluster on failure
+        if: failure()
+        run: |
+          kubectl get all --all-namespaces || true
+          kubectl describe pod -l app.kubernetes.io/name=regtool-hub || true
+          kubectl logs -l app.kubernetes.io/name=regtool-hub --tail=200 --all-containers || true
+          kubectl get events --sort-by=.lastTimestamp || true
+          helm status regtool-hub || true
+
+      - name: Stop the port-forward
+        if: always()
+        run: |
+          if [ -f /tmp/port-forward.pid ]; then
+            kill "$(cat /tmp/port-forward.pid)" 2>/dev/null || true
+          fi
