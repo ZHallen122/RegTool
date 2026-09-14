@@ -1,11 +1,16 @@
 # The image goreleaser publishes. Unlike ./Dockerfile it compiles nothing:
 # goreleaser has already built the binary for the target platform and puts it
-# in the build context, so this only wraps it. Building it by hand will not
-# work — use ./Dockerfile for that.
+# in the build context under $TARGETPLATFORM/, so this only wraps it. Building
+# it by hand will not work — use ./Dockerfile for that.
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY regtool-hub /usr/local/bin/regtool-hub
+# Set by buildx for every platform in dockers_v2.platforms, e.g. linux/amd64.
+# goreleaser lays the context out as <os>/<arch>/<binary>, so this is also the
+# directory the right binary for this leg of the build is in.
+ARG TARGETPLATFORM
+
+COPY $TARGETPLATFORM/regtool-hub /usr/local/bin/regtool-hub
 
 # distroless has no shell to mkdir with, and a /data created by WORKDIR alone
 # would belong to root, which the nonroot user could not then write hub.db

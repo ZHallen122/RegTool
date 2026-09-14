@@ -20,11 +20,13 @@ Point npm, yarn, pip, gem, go, cargo and homebrew at the registry mirror closest
 
 ## Install
 
-Homebrew (macOS, Linux):
+Homebrew (macOS only — it is a cask, and casks do not work on Linuxbrew):
 
 ```sh
-brew install ZHallen122/tap/regtool
+brew install --cask ZHallen122/tap/regtool
 ```
+
+On Linux use `go install` or a release tarball, both below.
 
 Scoop (Windows):
 
