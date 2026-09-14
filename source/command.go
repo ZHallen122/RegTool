@@ -23,6 +23,11 @@ func Update(updateChan chan string) error {
 }
 
 func ChangeAllRegistry(region string, updateChan chan string) error {
+	regionValue, ok := structs.StringToRegion(region)
+	if !ok {
+		return fmt.Errorf("unknown region: %s", region)
+	}
+
 	rs, err := GetRemoteRegistrySources()
 	if err != nil {
 		console.Error("Failed to fetch remote sources:", err.Error())
@@ -40,7 +45,7 @@ func ChangeAllRegistry(region string, updateChan chan string) error {
 	//lets do a git log-like backup for chang every time
 	for name, _ := range localAppsMap {
 		if manager, ok := appManagers[name]; ok {
-			manager.SetRegistry(structs.StringToRegion(region), rs)
+			manager.SetRegistry(regionValue, rs)
 
 		} else {
 			console.Error("Manager not found for:", name)
