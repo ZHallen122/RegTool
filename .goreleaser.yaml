@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: regtool
+
+builds:
+  - id: regtool
+    binary: regtool
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/ZHallen122/RegTool/internal/cli.Version={{ .Version }}
+      - -X github.com/ZHallen122/RegTool/internal/cli.Commit={{ .ShortCommit }}
+      - -X github.com/ZHallen122/RegTool/internal/cli.Date={{ .Date }}
+
+archives:
+  - id: regtool
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "regtool_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - id: archive
+    artifacts: archive
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^docs(\(.+\))?:'
+      - '^ci(\(.+\))?:'
+      - '^chore(\(.+\))?:'
+      - '^test(\(.+\))?:'
+
+brews:
+  - name: regtool
+    repository:
+      owner: ZHallen122
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/ZHallen122/RegTool"
+    description: "Switch package manager registries between regional mirrors"
+    license: "MIT"
+    commit_author:
+      name: ZHallen122
+      email: zhallen12261@gmail.com
+    test: |
+      system "#{bin}/regtool", "version"
+
+scoops:
+  - name: regtool
+    repository:
+      owner: ZHallen122
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      branch: main
+    directory: bucket
+    homepage: "https://github.com/ZHallen122/RegTool"
+    description: "Switch package manager registries between regional mirrors"
+    license: MIT
+    commit_author:
+      name: ZHallen122
+      email: zhallen12261@gmail.com
+
+release:
+  draft: false
+  prerelease: auto

@@ -1,7 +1,4 @@
-# version prints the ldflags-settable version and nothing else.
+# version prints the ldflags-settable version plus the build metadata.
 exec regtool version
 ! stderr .
-cmp stdout expected.txt
-
--- expected.txt --
-dev
+stdout '^regtool dev \(none, built unknown, \w+/\w+\)$'
