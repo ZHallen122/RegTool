@@ -35,39 +35,11 @@ func (b *gemBackend) Detect() (bool, error) {
 
 // gemRoot parses data into the top-level mapping of a .gemrc, returning an
 // empty mapping for a missing or empty file.
-func gemRoot(data []byte) (*yaml.Node, error) {
-	empty := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	if len(bytes.TrimSpace(data)) == 0 {
-		return empty, nil
-	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil, err
-	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return empty, nil
-	}
-	root := doc.Content[0]
-	switch {
-	case root.Kind == yaml.MappingNode:
-		return root, nil
-	case root.Tag == "!!null":
-		return empty, nil
-	default:
-		return nil, fmt.Errorf("expected a YAML mapping, got %s", root.Tag)
-	}
-}
+func gemRoot(data []byte) (*yaml.Node, error) { return yamlMappingRoot(data) }
 
 // gemSourcesNode returns the index of the :sources: value node in the mapping,
 // or -1 when the key is absent.
-func gemSourcesNode(root *yaml.Node) int {
-	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == gemSourcesKey {
-			return i + 1
-		}
-	}
-	return -1
-}
+func gemSourcesNode(root *yaml.Node) int { return yamlValueIndex(root, gemSourcesKey) }
 
 // gemCurrentSource returns the first entry of the :sources: list.
 func gemCurrentSource(root *yaml.Node) string {
@@ -88,11 +60,9 @@ func gemCurrentSource(root *yaml.Node) string {
 // gemSetSource replaces the :sources: list with the single target.
 func gemSetSource(root *yaml.Node, target string) {
 	seq := &yaml.Node{
-		Kind: yaml.SequenceNode,
-		Tag:  "!!seq",
-		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: target},
-		},
+		Kind:    yaml.SequenceNode,
+		Tag:     "!!seq",
+		Content: []*yaml.Node{yamlScalar(target)},
 	}
 	if i := gemSourcesNode(root); i >= 0 {
 		old := root.Content[i]
@@ -100,25 +70,16 @@ func gemSetSource(root *yaml.Node, target string) {
 		root.Content[i] = seq
 		return
 	}
-	root.Content = append(root.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: gemSourcesKey},
-		seq,
-	)
+	root.Content = append(root.Content, yamlScalar(gemSourcesKey), seq)
 }
 
 // gemEncode serialises the mapping back to .gemrc bytes, keeping the leading
 // document marker that gem itself writes.
 func gemEncode(root *yaml.Node, before []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(root); err != nil {
+	out, err := yamlEncode(root)
+	if err != nil {
 		return nil, err
 	}
-	if err := enc.Close(); err != nil {
-		return nil, err
-	}
-	out := buf.Bytes()
 	hadMarker := bytes.HasPrefix(bytes.TrimLeft(before, " \t\r\n"), []byte("---"))
 	if !bytes.HasPrefix(out, []byte("---")) && (hadMarker || len(bytes.TrimSpace(before)) == 0) {
 		out = append([]byte("---\n"), out...)

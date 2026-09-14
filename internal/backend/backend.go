@@ -120,6 +120,8 @@ func All(env Env) []Backend {
 		NewGem(env),
 		NewGo(env),
 		NewCargo(env),
+		NewHelm(env),
+		NewDocker(env),
 	}
 }
 

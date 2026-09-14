@@ -1,0 +1,78 @@
+# helm and docker are file backends like the rest, but neither file holds a
+# single registry: helm keeps a list of named chart repositories and docker an
+# array of registry mirrors. Both env overrides point the backends inside the
+# work directory, so this never goes near /etc/docker or the developer's own
+# helm configuration.
+env HELM_REPOSITORY_CONFIG=$WORK/helm/repositories.yaml
+env REGTOOL_DOCKER_DAEMON_JSON=$WORK/docker/daemon.json
+
+mkdir $WORK/helm
+mkdir $WORK/docker
+cp repositories.yaml $WORK/helm/repositories.yaml
+cp daemon.json $WORK/docker/daemon.json
+
+# Both are detected now that their files exist.
+exec regtool status
+! stderr .
+stdout '^helm\s+us\s+https://charts\.helm\.sh/stable$'
+stdout '^docker\s+local\s+https://old\.example$'
+
+# A dry run shows what each file would become.
+exec regtool use cn helm docker --dry-run
+! stderr .
+stdout '^dry run: no configuration was changed$'
+stdout '^helm\s+https://charts\.helm\.sh/stable\s+https://mirror\.azure\.cn/kubernetes/charts\s+would change$'
+stdout '^docker\s+https://old\.example\s+https://docker\.m\.daocloud\.io\s+would change$'
+stdout '^-    url: https://charts\.helm\.sh/stable$'
+stdout '^\+    url: https://mirror\.azure\.cn/kubernetes/charts$'
+stdout '^\+    "https://docker\.m\.daocloud\.io"$'
+
+# Nothing was written.
+cmp $WORK/helm/repositories.yaml repositories.yaml
+cmp $WORK/docker/daemon.json daemon.json
+
+# The real run keeps the bitnami repository and the log-driver key.
+exec regtool use cn helm docker
+! stderr .
+stdout '^helm\s+.*\s+changed$'
+stdout '^docker\s+.*\s+changed$'
+stdout '^snapshot \S+: run .regtool undo. to put it back$'
+
+grep 'url: https://mirror\.azure\.cn/kubernetes/charts' $WORK/helm/repositories.yaml
+grep 'name: bitnami' $WORK/helm/repositories.yaml
+grep 'https://charts\.bitnami\.com/bitnami' $WORK/helm/repositories.yaml
+grep 'caFile: /etc/ssl/bitnami\.pem' $WORK/helm/repositories.yaml
+grep '"https://docker\.m\.daocloud\.io"' $WORK/docker/daemon.json
+grep '"log-driver": "json-file"' $WORK/docker/daemon.json
+
+exec regtool status
+stdout '^helm\s+cn\s+https://mirror\.azure\.cn/kubernetes/charts$'
+stdout '^docker\s+cn\s+https://docker\.m\.daocloud\.io$'
+
+# Asking again changes nothing.
+exec regtool use cn helm docker
+stdout '^helm\s+.*already set$'
+stdout '^docker\s+.*already set$'
+! stdout 'snapshot'
+
+# undo puts both files back byte for byte.
+exec regtool undo
+! stderr .
+stdout '^restored snapshot \S+ \(use cn\)$'
+cmp $WORK/helm/repositories.yaml repositories.yaml
+cmp $WORK/docker/daemon.json daemon.json
+
+-- repositories.yaml --
+apiVersion: v1
+generated: "2026-01-02T03:04:05Z"
+repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+    caFile: /etc/ssl/bitnami.pem
+  - name: stable
+    url: https://charts.helm.sh/stable
+-- daemon.json --
+{
+  "log-driver": "json-file",
+  "registry-mirrors": ["https://old.example"]
+}

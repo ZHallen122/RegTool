@@ -8,7 +8,7 @@ stdout '^cache\s+.+sources\.cache\.json$'
 stdout '^etag\s+none$'
 stdout '^fetched\s+none$'
 stdout '^regions\s+3$'
-stdout '^apps\s+11$'
+stdout '^apps\s+13$'
 ! exists home/regtool/sources.cache.json
 
 # The same fields are available as JSON, on stdout only.
@@ -18,7 +18,7 @@ stdout '"origin": "embedded"'
 stdout '"offline": true'
 stdout '"cachePath":'
 stdout '"regions": 3'
-stdout '"apps": 11'
+stdout '"apps": 13'
 # Nothing is cached, so neither field is reported at all.
 ! stdout '"etag":'
 ! stdout '"fetchedAt":'

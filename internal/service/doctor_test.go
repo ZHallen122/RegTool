@@ -177,6 +177,38 @@ func TestDoctorCoversEveryKnownAppByDefault(t *testing.T) {
 	}
 }
 
+// helm and docker are probed like any other app: their mirrors are ordinary
+// URLs and need no special case anywhere in Doctor.
+func TestDoctorCoversHelmAndDocker(t *testing.T) {
+	ok := probeServer(t, http.StatusOK, 0)
+	env, root := testEnv(t)
+	sources := &structs.RegistrySources{
+		structs.US: {"helm": {ok}, "docker": {ok}},
+		structs.CN: {"helm": {ok}, "docker": {ok}},
+		structs.EU: {"helm": {ok}, "docker": {ok}},
+	}
+	svc := New(sources, backend.All(env), history.New(filepath.Join(root, "history")),
+		WithProbeOptions(probe.Options{Timeout: 2 * time.Second}))
+
+	reports, err := svc.Doctor(context.Background(), []string{"charts", "dockerd"})
+	if err != nil {
+		t.Fatalf("Doctor() returned an unexpected error: %v", err)
+	}
+
+	apps := make(map[string]int)
+	for _, report := range reports {
+		if !report.OK() {
+			t.Errorf("Doctor() called a live mirror unusable: %+v", report)
+		}
+		apps[report.App]++
+	}
+	for _, app := range []string{"helm", "docker"} {
+		if apps[app] != 3 {
+			t.Errorf("Doctor() produced %d reports for %s, want one per region: %+v", apps[app], app, reports)
+		}
+	}
+}
+
 func TestDoctorRejectsAnUnknownApp(t *testing.T) {
 	ok := probeServer(t, http.StatusOK, 0)
 	svc, _ := probeService(t, ok, ok, ok)
