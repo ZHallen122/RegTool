@@ -121,6 +121,7 @@ func All(env Env) []Backend {
 		NewGo(env),
 		NewCargo(env),
 		NewHelm(env),
+		NewDocker(env),
 	}
 }
 

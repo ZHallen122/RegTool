@@ -185,5 +185,30 @@ func fixtures() []fixture {
 			from:     "https://old.example/charts",
 			mustKeep: []string{"apiVersion: v1", "generated:", "bitnami", "username: someone"},
 		},
+		{
+			name: "docker",
+			make: NewDocker,
+			// The system-wide daemon.json is under /etc on Linux; the tests
+			// must never go near it.
+			vars: func(home string) map[string]string {
+				return map[string]string{
+					DockerDaemonJSONEnvVar: filepath.Join(home, "docker", "daemon.json"),
+				}
+			},
+			existing: "{\n" +
+				"  \"log-driver\": \"json-file\",\n" +
+				"  \"registry-mirrors\": [\"https://old.example\"],\n" +
+				"  \"max-concurrent-downloads\": 6\n" +
+				"}\n",
+			from:     "https://old.example",
+			mustKeep: []string{"log-driver", "json-file", "max-concurrent-downloads"},
+			wantAfter: "{\n" +
+				"  \"log-driver\": \"json-file\",\n" +
+				"  \"max-concurrent-downloads\": 6,\n" +
+				"  \"registry-mirrors\": [\n" +
+				"    \"" + target + "\"\n" +
+				"  ]\n" +
+				"}\n",
+		},
 	}
 }
