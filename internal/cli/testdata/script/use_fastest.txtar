@@ -1,0 +1,50 @@
+# use --fastest measures every region and points each app at its quickest
+# mirror. us is fast, cn is slow and eu is a closed port.
+env REGTOOL_SOURCES_FILE=$PROBE_SOURCES
+cp npmrc $HOME/.npmrc
+
+# A dry run says which region it picked and how long that mirror took.
+exec regtool use --fastest npm --dry-run
+! stderr .
+stdout '^dry run: no configuration was changed$'
+stdout '^APP\s+REGION\s+FROM\s+TO\s+RESULT$'
+stdout '^npm\s+us \(\S+\)\s+https://registry\.npmjs\.org\s+http://127\.0\.0\.1:\d+\s+would change$'
+cmp $HOME/.npmrc npmrc
+
+# --json carries the region and the latency that won it the job.
+exec regtool use --fastest npm --dry-run --json
+! stderr .
+stdout '"region": "us"'
+stdout '"latencyMs":'
+cmp $HOME/.npmrc npmrc
+
+# For real: the file is rewritten and the run is snapshotted under its own note.
+exec regtool use --fastest npm
+! stderr .
+stdout '^npm\s+us \(\S+\)\s+\S+\s+\S+\s+changed$'
+grep '^registry=http://127\.0\.0\.1:\d+$' $HOME/.npmrc
+
+exec regtool history
+stdout 'use --fastest'
+
+# undo puts it back like any other change.
+exec regtool undo
+cmp $HOME/.npmrc npmrc
+
+# A plain use has no region column, because the user already named it.
+exec regtool use cn npm --dry-run
+stdout '^APP\s+FROM\s+TO\s+RESULT$'
+
+# Naming a region and asking for --fastest at once is a contradiction.
+! exec regtool use cn npm --fastest
+stderr 'fastest chooses the region itself'
+! stdout .
+
+# And use still needs a region when --fastest is not given.
+! exec regtool use
+stderr 'use needs a region'
+stderr 'us, cn, eu'
+! stdout .
+
+-- npmrc --
+registry=https://registry.npmjs.org

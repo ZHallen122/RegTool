@@ -1,0 +1,39 @@
+# When nothing answers, doctor still prints every row and then fails, and
+# use --fastest has nothing to pick from. Port 1 on the loopback interface is
+# never listened on.
+env REGTOOL_SOURCES_FILE=$WORK/sources.json
+cp npmrc $HOME/.npmrc
+
+! exec regtool doctor npm
+stdout '^APP\s+REGION\s+URL\s+LATENCY\s+STATUS$'
+stdout '^npm\s+cn\s+http://127\.0\.0\.1:1\s+-\s+error: .+$'
+stdout '^npm\s+eu\s+http://127\.0\.0\.1:1\s+-\s+error: .+$'
+stdout '^npm\s+us\s+http://127\.0\.0\.1:1\s+-\s+error: .+$'
+stderr 'none of the 3 known mirrors answered'
+
+# The JSON form fails the same way and still lists every mirror.
+! exec regtool doctor npm --json
+stdout '"status": "error"'
+! stdout '"status": "ok"'
+stderr 'none of the 3 known mirrors answered'
+
+# use --fastest reports the app it could not place, naming every region tried
+# and why each one was unusable.
+! exec regtool use --fastest npm
+stdout '^APP\s+REGION\s+FROM\s+TO\s+RESULT$'
+stdout '^npm\s+-\s+-\s+-\s+error: no reachable npm mirror: us \(connection refused\), cn \(connection refused\), eu \(connection refused\)$'
+stderr 'no reachable npm mirror'
+
+# Nothing was written and nothing was snapshotted.
+cmp $HOME/.npmrc npmrc
+exec regtool history
+stdout '^regtool has not changed anything yet$'
+
+-- npmrc --
+registry=https://registry.npmjs.org
+-- sources.json --
+{
+  "us": {"npm": ["http://127.0.0.1:1"]},
+  "cn": {"npm": ["http://127.0.0.1:1"]},
+  "eu": {"npm": ["http://127.0.0.1:1"]}
+}

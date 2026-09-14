@@ -69,9 +69,31 @@ func GetRemoteRegistrySources(ctx context.Context) (*structs.RegistrySources, er
 // they never touch the network.
 const OfflineEnvVar = "REGTOOL_OFFLINE"
 
+// SourcesFileEnvVar names a sources.json on disk to use instead of the remote
+// and embedded ones. It exists for the end-to-end tests, which need mirrors
+// pointing at servers that only exist while the test runs, and it takes
+// precedence over OfflineEnvVar.
+const SourcesFileEnvVar = "REGTOOL_SOURCES_FILE"
+
+// GetFileRegistrySources reads a sources.json from disk.
+func GetFileRegistrySources(path string) (*structs.RegistrySources, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the sources file %s: %w", path, err)
+	}
+	var sources structs.RegistrySources
+	if err := json.Unmarshal(raw, &sources); err != nil {
+		return nil, fmt.Errorf("failed to parse the sources file %s: %w", path, err)
+	}
+	return &sources, nil
+}
+
 // LoadRegistrySources returns the remote sources when they are reachable and
 // falls back to the embedded copy otherwise.
 func LoadRegistrySources(ctx context.Context) (*structs.RegistrySources, error) {
+	if path := os.Getenv(SourcesFileEnvVar); path != "" {
+		return GetFileRegistrySources(path)
+	}
 	if os.Getenv(OfflineEnvVar) != "" {
 		return GetEmbeddedRegistrySources()
 	}
