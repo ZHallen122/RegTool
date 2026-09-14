@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"regtool/common/alias"
-	"regtool/source"
-	"regtool/source/structs"
 	"strings"
+
+	"github.com/ZHallen122/RegTool/common/alias"
+	"github.com/ZHallen122/RegTool/source"
+	"github.com/ZHallen122/RegTool/source/structs"
 )
 
 type NpmRegistryManager struct{}

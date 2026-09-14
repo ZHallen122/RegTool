@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"regtool/source"
 	"strings"
 	"time"
+
+	"github.com/ZHallen122/RegTool/source"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"

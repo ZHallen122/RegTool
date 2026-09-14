@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"regtool/source/structs"
+	"github.com/ZHallen122/RegTool/source/structs"
 )
 
 func TestConvertSourcesSingleRegion(t *testing.T) {

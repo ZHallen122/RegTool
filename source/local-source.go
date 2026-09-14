@@ -3,7 +3,8 @@ package source
 import (
 	"context"
 	"fmt"
-	"regtool/source/localdata"
+
+	"github.com/ZHallen122/RegTool/source/localdata"
 )
 
 // Convert map[Name]Source

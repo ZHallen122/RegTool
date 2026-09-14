@@ -4,7 +4,7 @@
 > 题目不变（一键切换包管理器镜像源），重点补工程质量、测试、并发、发布流程。
 > 本文档是工作清单，每完成一步就勾掉对应的框。
 
-最后更新：2026-09-13
+最后更新：2026-09-14
 
 ---
 
@@ -34,16 +34,16 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 ### 已知问题
 
-- [ ] `pip.go` 和 `yarn.go` 的 `SetRegistry` 取的是 `regionSources["npm"]`，pip 会被设成 npm 的镜像地址。真 bug。
-- [ ] `env.Init()` 找不到 `.env` 直接 panic，二进制发给别人跑不起来。
-- [ ] 用 `curl` 而不是 `net/http`，没有 context，没有超时。
-- [ ] 大量错误被 `_` 吞掉，`UpdateRegistry`、`ChangeAllRegistry` 失败时静默。
-- [ ] `cmd/run.go` 的 `regions` 里有 "jp"，但 `structs.StringToRegion` 不认，返回空字符串。
+- [x] `pip.go` 和 `yarn.go` 的 `SetRegistry` 取的是 `regionSources["npm"]`，pip 会被设成 npm 的镜像地址。真 bug。
+- [x] `env.Init()` 找不到 `.env` 直接 panic，二进制发给别人跑不起来。
+- [x] 用 `curl` 而不是 `net/http`，没有 context，没有超时。
+- [x] 大量错误被 `_` 吞掉，`UpdateRegistry`、`ChangeAllRegistry` 失败时静默。
+- [x] `cmd/run.go` 的 `regions` 里有 "jp"，但 `structs.StringToRegion` 不认，返回空字符串。
 - [ ] 全局可变状态（`SOURCES`、`registryManagers`、`commandRegistry`）加 `init()` 注册，无法单测。
 - [ ] 只支持 macOS / Linux：依赖 `$SHELL`、`.bashrc`、Makefile 里 `sudo install`。
-- [ ] go.mod 所有依赖都标 `// indirect`，还 require 了不该出现在运行时依赖里的 `cobra-cli`。
-- [ ] clone 后直接 `go build` 失败，必须先跑代码生成器。
-- [ ] 源列表硬编码 gitee 地址，没有本地缓存和离线回退。
+- [x] go.mod 所有依赖都标 `// indirect`，还 require 了不该出现在运行时依赖里的 `cobra-cli`。
+- [x] clone 后直接 `go build` 失败，必须先跑代码生成器。
+- [x] 源列表硬编码 gitee 地址，没有本地缓存和离线回退。
 
 ---
 
@@ -61,17 +61,17 @@ RegTool（原名 RegistryHub）是一个用 bubbletea 写的终端 TUI，按地�
 
 目标：clone 下来就能 build，能测，能 lint，bug 修掉。
 
-- [ ] go.mod 升到 go 1.25，重新整理直接依赖和间接依赖，去掉 `cobra-cli`。
-- [ ] 删掉 `tools/gen_initall.go` 和 `source/initall`，改成显式注册（一个 `registry.go` 列出所有后端）。
-- [ ] 删掉 `env/` 和 `.env` 依赖，调试开关改用 flag 或环境变量，缺失时不 panic。
-- [ ] `curl` 改成 `net/http`，带 `context.Context` 和超时。
-- [ ] 错误全部用 `fmt.Errorf("...: %w", err)` 包装并向上返回，不再 `_` 吞掉。
-- [ ] 日志改用 `log/slog`。
-- [ ] 修 pip / yarn 取错 key 的 bug。
-- [ ] 修 "jp" 地区不被识别的问题（要么加进 `Region`，要么从菜单里删掉）。
-- [ ] 加 `golangci-lint` 配置。
-- [ ] CI：`go vet`、`golangci-lint`、`go test -race -cover`，linux / macos / windows 三平台矩阵。
-- [ ] 补第一批单元测试：alias、localdata、sources 解析、`StringToRegion`。
+- [x] go.mod 升到 go 1.25，重新整理直接依赖和间接依赖，去掉 `cobra-cli`。
+- [x] 删掉 `tools/gen_initall.go` 和 `source/initall`，改成显式注册（一个 `registry.go` 列出所有后端）。
+- [x] 删掉 `env/` 和 `.env` 依赖，调试开关改用 flag 或环境变量，缺失时不 panic。
+- [x] `curl` 改成 `net/http`，带 `context.Context` 和超时。
+- [x] 错误全部用 `fmt.Errorf("...: %w", err)` 包装并向上返回，不再 `_` 吞掉。
+- [x] 日志改用 `log/slog`。
+- [x] 修 pip / yarn 取错 key 的 bug。
+- [x] 修 "jp" 地区不被识别的问题（要么加进 `Region`，要么从菜单里删掉）。
+- [x] 加 `golangci-lint` 配置。
+- [x] CI：`go vet`、`golangci-lint`、`go test -race -cover`，linux / macos / windows 三平台矩阵。
+- [x] 补第一批单元测试：alias、localdata、sources 解析、`StringToRegion`。
 
 验收：`git clone` 后 `go build ./...` 和 `go test ./...` 直接通过，CI 全绿。
 
@@ -170,3 +170,4 @@ Step 5 保证项目能被安装和使用，star 和 issue 才会来。Step 6 是
 | 日期 | 完成内容 |
 | --- | --- |
 | 2026-09-13 | 完成现状分析，写下本路线图 |
+| 2026-09-14 | Step 1 完成（PR #2 #3 #4 #5）：可直接 build，net/http + 内嵌默认源，错误上抛，lint + 三平台 CI，模块路径改为 github.com/ZHallen122/RegTool。全局可变状态和 Windows 支持留到 Step 2 / 3 处理 |

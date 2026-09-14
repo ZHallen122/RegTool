@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regtool/common/alias"
-	"regtool/console"
-	"regtool/source/structs"
 	"time"
+
+	"github.com/ZHallen122/RegTool/common/alias"
+	"github.com/ZHallen122/RegTool/console"
+	"github.com/ZHallen122/RegTool/source/structs"
 )
 
 // defaultSourcesJSON is the bundled copy of the registry sources. It is used as

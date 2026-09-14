@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"regtool/source/structs"
 	"strings"
+
+	"github.com/ZHallen122/RegTool/source/structs"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
