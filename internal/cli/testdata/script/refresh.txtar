@@ -1,0 +1,6 @@
+# refresh records the current registries under the config directory.
+exec regtool refresh
+stdout '^recorded the current registries$'
+exists $HOME/.config/regtool/backup.json
+grep '"npm":"https://registry.npmjs.org/"' $HOME/.config/regtool/backup.json
+grep '"pip":"https://pypi.example.com/simple"' $HOME/.config/regtool/backup.json

@@ -1,16 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
-	"github.com/ZHallen122/RegTool/internal/tui"
+	"github.com/ZHallen122/RegTool/internal/cli"
 	_ "github.com/ZHallen122/RegTool/source/app/all"
 )
 
 func main() {
-	if err := tui.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "regtool:", err)
-		os.Exit(1)
-	}
+	os.Exit(cli.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }

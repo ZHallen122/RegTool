@@ -6,17 +6,42 @@
 
 **Features:**
 
-- **Using TUI instead CLI**: The TUI provides a more intuitive user experience.
+- **CLI and TUI**: Scriptable subcommands for automation, an interactive interface when you just want to click around.
 - **Multi-Registry Management**: Easily switch between different registries for each supported software.
 - **Secure Token Storage**: Securely manage and store access tokens for private registries.
 - **Centralized Configuration**: Simplify and centralize the configuration of all supported package managers and registries.
 - **User-Friendly Interface**: Navigate through settings and configurations with an intuitive interface.
 
-**How to Use:**
+### Usage
 
-1. **Installation**: Follow the installation instructions specific to your operating system.
-2. **Configuration**: Use the provided interface or command-line tools to configure your registries.
-3. **Management**: Easily switch between registries and manage access tokens as needed.
+Run `regtool` with no arguments to open the interactive interface. Everything it
+can do is also available as a subcommand:
+
+```sh
+# show the registry every installed package manager currently points at
+regtool status
+
+# list the mirrors RegTool knows about, optionally for one package manager
+regtool list
+regtool list npm
+
+# preview a change without touching any configuration
+regtool use cn npm --dry-run
+
+# point npm and pip at the China mirrors; with no app names, every installed app
+regtool use cn npm pip
+regtool use us
+
+# record the current registries so a later change can be compared against them
+regtool refresh
+
+# print the version
+regtool version
+```
+
+`status`, `list` and `use` accept `--json`, which writes the result to stdout as
+JSON so it can be piped into `jq` or another tool. Errors go to stderr and the
+process exits with status 1.
 
 By supporting a wide range of software and registries, RegTool aims to streamline your development process and provide a seamless experience across different ecosystems.
 

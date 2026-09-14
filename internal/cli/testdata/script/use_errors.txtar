@@ -1,0 +1,22 @@
+# an unknown region is rejected before anything is touched.
+! exec regtool use xx
+stderr 'unknown region "xx"'
+stderr 'us, cn, eu'
+! stdout .
+
+# so is an unknown app.
+! exec regtool use cn cargo
+stderr 'unknown app "cargo"'
+! stdout .
+
+# nothing above changed anything.
+exec regtool status
+stdout '^npm\s+us\s+https://registry\.npmjs\.org/$'
+
+# use needs at least a region.
+! exec regtool use
+stderr 'requires at least 1 arg'
+
+# an unknown subcommand is an error too.
+! exec regtool nosuchcommand
+stderr 'unknown command "nosuchcommand"'

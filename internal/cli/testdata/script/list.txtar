@@ -1,0 +1,17 @@
+# list prints every known mirror, sorted by app and then region.
+exec regtool list
+! stderr .
+stdout '^APP\s+REGION\s+URL$'
+stdout '^gem\s+cn\s+https://mirrors\.tuna\.tsinghua\.edu\.cn/rubygems/$'
+stdout '^npm\s+cn\s+https://registry\.npmmirror\.com$'
+stdout '^npm\s+eu\s+https://registry\.npmjs\.org$'
+stdout '^npm\s+us\s+https://registry\.npmjs\.org$'
+stdout '^pip\s+us\s+https://pypi\.org/simple$'
+stdout '^yarn\s+cn\s+https://registry\.npmmirror\.com$'
+
+# the same data is available as JSON, on stdout only.
+exec regtool list --json
+! stderr .
+stdout '"app": "npm"'
+stdout '"region": "cn"'
+stdout '"url": "https://registry.npmmirror.com"'
