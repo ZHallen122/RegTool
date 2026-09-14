@@ -1,0 +1,22 @@
+# The image goreleaser publishes. Unlike ./Dockerfile it compiles nothing:
+# goreleaser has already built the binary for the target platform and puts it
+# in the build context, so this only wraps it. Building it by hand will not
+# work — use ./Dockerfile for that.
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY regtool-hub /usr/local/bin/regtool-hub
+
+# distroless has no shell to mkdir with, and a /data created by WORKDIR alone
+# would belong to root, which the nonroot user could not then write hub.db
+# into. Copying the base image's own nonroot home is the way to get a
+# correctly owned empty directory without a second stage.
+COPY --from=gcr.io/distroless/static-debian12:nonroot --chown=65532:65532 /home/nonroot /data
+
+WORKDIR /data
+VOLUME ["/data"]
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/regtool-hub", "--db", "/data/hub.db"]
+CMD ["--addr", ":8080"]

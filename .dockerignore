@@ -1,0 +1,26 @@
+# Everything the build does not need. Keeping the context small is most of what
+# makes `docker build` fast, and it stops a local hub.db or dist/ from
+# invalidating the layer cache.
+.git
+.github
+.golangci.yml
+.goreleaser.yaml
+Dockerfile
+Dockerfile.goreleaser
+.dockerignore
+Makefile
+dist/
+deploy/
+docs/
+assets/
+*.md
+!README.md
+regtool
+regtool.exe
+regtool-hub
+regtool-hub.exe
+*.db
+*.db-wal
+*.db-shm
+cover.out
+coverage.out
