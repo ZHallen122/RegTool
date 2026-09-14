@@ -1,0 +1,38 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - unparam
+    - gocritic
+    - revive
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - singleCaseSwitch
+    staticcheck:
+      checks:
+        - all
+        - -QF1003
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+    paths:
+      - tools/
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ZHallen122/RegTool

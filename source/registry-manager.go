@@ -22,6 +22,6 @@ type AppManager interface {
 	// - error: An error if there is an issue setting the registry URL.
 	SetRegistry(region structs.Region, sources *structs.RegistrySources) (string, error)
 
-	//check is this App exists
+	// check is this App exists
 	IsExists() bool
 }

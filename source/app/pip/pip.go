@@ -3,11 +3,12 @@ package pip
 import (
 	"errors"
 	"fmt"
+	"os/exec"
+	"strings"
+
 	"github.com/ZHallen122/RegTool/common/alias"
 	"github.com/ZHallen122/RegTool/source"
 	"github.com/ZHallen122/RegTool/source/structs"
-	"os/exec"
-	"strings"
 )
 
 type PipRegistryManager struct{}

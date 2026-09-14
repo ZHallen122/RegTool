@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"github.com/ZHallen122/RegTool/source"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/ZHallen122/RegTool/source"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -6,12 +6,10 @@ import (
 
 var (
 	// Colors
-	primaryColor    = lipgloss.Color("#61AFEF")
-	bgColor         = lipgloss.Color("#282C34")
-	textColor       = lipgloss.Color("#ABB2BF")
-	selectedColor   = lipgloss.Color("#98C379")
-	unselectedColor = lipgloss.Color("#3E4451")
-	accentColor     = lipgloss.Color("#C678DD")
+	primaryColor  = lipgloss.Color("#61AFEF")
+	textColor     = lipgloss.Color("#ABB2BF")
+	selectedColor = lipgloss.Color("#98C379")
+	accentColor   = lipgloss.Color("#C678DD")
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().

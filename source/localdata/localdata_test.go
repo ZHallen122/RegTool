@@ -10,7 +10,7 @@ import (
 // useTempPaths points the package-level path variables at a per-test temporary
 // directory and restores them afterwards. The package reads these vars at call
 // time, so overriding them is enough to isolate the tests from $HOME.
-func useTempPaths(t *testing.T) string {
+func useTempPaths(t *testing.T) {
 	t.Helper()
 
 	oldConfig, oldHub, oldFile := DOT_CONFIG_DIR, REGISTRY_HUB_DIR, SOURCE_BACKUP_FILE
@@ -22,7 +22,6 @@ func useTempPaths(t *testing.T) string {
 	DOT_CONFIG_DIR = filepath.Join(root, DOT_CONFIG_NAME)
 	REGISTRY_HUB_DIR = filepath.Join(DOT_CONFIG_DIR, REGISTRY_HUB_FOLDER_NAME)
 	SOURCE_BACKUP_FILE = filepath.Join(REGISTRY_HUB_DIR, SOURCE_BACKUP_FILE_NAME)
-	return root
 }
 
 // writeBackup writes raw bytes to the backup file, creating its directory.

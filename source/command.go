@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/ZHallen122/RegTool/source/localdata"
 	"github.com/ZHallen122/RegTool/source/structs"
 )
 
-//here is the command implementation of the source
+// here is the command implementation of the source
 
 // Check if there is support registry
 func Update(updateChan chan string) error {
@@ -52,8 +53,8 @@ func ChangeAllRegistry(region string, updateChan chan string) error {
 	}
 
 	appManagers := GetAllRegisteredApp()
-	//TODO do backup if changed
-	//lets do a git log-like backup for chang every time
+	// TODO do backup if changed
+	// lets do a git log-like backup for chang every time
 	var errs []error
 	for name := range localAppsMap {
 		manager, ok := appManagers[name]

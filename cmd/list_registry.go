@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"github.com/ZHallen122/RegTool/source"
 	"strings"
-	"unicode"
+
+	"github.com/ZHallen122/RegTool/source"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,7 +106,7 @@ func (m listRegistryModel) View() string {
 
 	for _, line := range visibleOutput {
 		if strings.HasPrefix(line, "APP: ") {
-			contentBuilder.WriteString("\n" + m.formatApp(line, m.output))
+			contentBuilder.WriteString("\n" + m.formatApp(m.output))
 		} else {
 			contentBuilder.WriteString(line + "\n")
 		}
@@ -126,7 +126,7 @@ func (m listRegistryModel) View() string {
 
 	return finalBuilder.String()
 }
-func (m listRegistryModel) formatApp(appLine string, allLines []string) string {
+func (m listRegistryModel) formatApp(allLines []string) string {
 	var builder strings.Builder
 	inCurrentApp := false
 
@@ -142,39 +142,6 @@ func (m listRegistryModel) formatApp(appLine string, allLines []string) string {
 	}
 	builder.WriteString("\n")
 	return builder.String()
-}
-
-func (m listRegistryModel) wrapText(text string, width int) string {
-	words := strings.Fields(removeSingleColorAttributes(text))
-	if len(words) == 0 {
-		return ""
-	}
-
-	var lines []string
-	var currentLine string
-
-	for _, word := range words {
-		if len(currentLine)+len(word)+1 > width {
-			lines = append(lines, strings.TrimSpace(currentLine))
-			currentLine = word
-		} else {
-			if currentLine != "" {
-				currentLine += " "
-			}
-			currentLine += word
-		}
-	}
-
-	if currentLine != "" {
-		lines = append(lines, strings.TrimSpace(currentLine))
-	}
-
-	styledLines := make([]string, len(lines))
-	for i, line := range lines {
-		styledLines[i] = applySingleOriginalStyle(text, line)
-	}
-
-	return strings.Join(styledLines, "\n    ")
 }
 
 func (m listRegistryModel) startListingRegistryByAppName(appName string) tea.Cmd {
@@ -201,32 +168,4 @@ func NewListRegistryModel() listRegistryModel {
 
 func init() {
 	RegisterCommand("listRegistry", "List Registry by App Name", NewListRegistryModel())
-}
-
-func removeSingleColorAttributes(s string) string {
-	var result strings.Builder
-	inEscapeSeq := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscapeSeq = true
-		} else if inEscapeSeq {
-			if unicode.IsLetter(r) {
-				inEscapeSeq = false
-			}
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return result.String()
-}
-
-func applySingleOriginalStyle(original, wrapped string) string {
-	if strings.HasPrefix(original, GetInfoText("")) {
-		return GetInfoText(wrapped)
-	} else if strings.HasPrefix(original, GetSuccessText("")) {
-		return GetSuccessText(wrapped)
-	} else if strings.HasPrefix(original, GetErrorText("")) {
-		return GetErrorText(wrapped)
-	}
-	return wrapped
 }

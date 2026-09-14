@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/ZHallen122/RegTool/source/structs"
 	"os"
 	"strings"
+
+	"github.com/ZHallen122/RegTool/source/structs"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
