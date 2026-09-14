@@ -7,6 +7,16 @@ Point npm, yarn, pip, gem, go, cargo and homebrew at the registry mirror closest
 [![CI](https://github.com/ZHallen122/RegTool/actions/workflows/go.yml/badge.svg)](https://github.com/ZHallen122/RegTool/actions/workflows/go.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
+## Demo
+
+![RegTool demo](./assets/demo.gif)
+
+The recording is a [VHS](https://github.com/charmbracelet/vhs) tape,
+[`demo/demo.tape`](./demo/demo.tape): `make demo` builds a linux binary, runs
+the tape against a throwaway `$HOME` in the VHS container and writes
+`assets/demo.gif` again, so the GIF is regenerated from the repository rather
+than re-recorded by hand.
+
 ## Features
 
 - **File-based backends.** RegTool edits `~/.npmrc`, `~/.yarnrc`, `~/.yarnrc.yml`, `pip.conf`, `~/.gemrc`, the Go env file and `~/.cargo/config.toml` itself. It never shells out to the package manager, so it works on a machine where npm or gem is not installed at all. Homebrew is the one exception: it is configured through environment variables, so it still goes through your shell rc file and `brew`.
@@ -258,16 +268,6 @@ embedded copy if the hub is unreachable:
 export REGTOOL_SOURCES_URL=http://localhost:8080/v1/sources
 regtool list npm
 ```
-
-## Demo
-
-![RegTool demo](./assets/demo.gif)
-
-The recording is a [VHS](https://github.com/charmbracelet/vhs) tape,
-[`demo/demo.tape`](./demo/demo.tape): `make demo` builds a linux binary, runs
-the tape against a throwaway `$HOME` in the VHS container and writes
-`assets/demo.gif` again, so the GIF is regenerated from the repository rather
-than re-recorded by hand.
 
 ## Development
 
